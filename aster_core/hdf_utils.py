@@ -258,8 +258,8 @@ def dn2rad(x,ucc1):
     rad = (x - 1.) * ucc1
     return rad
 
-def rad2ref(rad,esd,irradiance1,sza):
-    ref = (np.pi * rad * (esd * esd)) / (irradiance1 * np.sin(np.pi * sza / 180))
+def rad2ref(rad,esd,irradiance1,sea):
+    ref = (np.pi * rad * (esd * esd)) / (irradiance1 * np.sin(np.pi * sea / 180))
     return ref
 
 def dn2t(x,k1,k2):

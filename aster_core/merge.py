@@ -1,6 +1,7 @@
 import numpy as np
 from aster_core.cloud import get_cloud_masks,add_to_chanel,split_from_chanel
 import time
+import copy
 
 def merge_min(ref_list, ref_c=0):
     """
@@ -179,6 +180,20 @@ def sort_by_cloud_and_coverage(ref_list, mask_list, nodata=0):
 
     return selected_data, selected_mask
 
+def get_nocloud_img(ref_list, mask_list):
+    noholl_data = copy.deepcopy(ref_list)
+    for index, data in enumerate(noholl_data):
+        data[:, mask_list[index] == 1] = 0
+        noholl_data[index] = data
+
+    noholl_data=np.asarray(noholl_data)
+    ref_list=np.asarray(ref_list)
+    noholl_sum = noholl_data.sum((0, 1))
+    zero_index = np.where(noholl_sum == 0)
+    for i in range(len(zero_index[0])):
+        noholl_data[:, :, zero_index[-2][i], zero_index[-1][i]] = ref_list[:, :, zero_index[-2][i], zero_index[-1][i]]
+    return list(noholl_data)
+
 def get_least_index(ref_list):
     ref_data = np.asarray(ref_list)
     if ref_data.shape[0] < 2:
@@ -210,7 +225,8 @@ def get_least_ref_and_mask(ref_list, mask_list):
     Returns:
     tuple: A tuple containing two lists, the reflectance list and mask list up to the least value index.
     """
-    least_index = get_least_index(ref_list)  # Get the index of the least value
+    nocloudref_list = get_nocloud_img(ref_list,mask_list)
+    least_index = get_least_index(nocloudref_list)  # Get the index of the least value
     least_ref_list = ref_list[:least_index]  # Get the reflectance list up to the least value index
     least_mask_list = mask_list[:least_index]  # Get the mask list up to the least value index
 
@@ -251,5 +267,35 @@ def merge_deshadow_with_cloud_mask(ref_list, cloud_mask_list=None, ref_c=0, thre
         merge_data, merge_mask = split_from_chanel(merge_data)  # Otherwise, split the merged data and mask
         return merge_data, merge_mask  # Return the split data and mask
 
+def merge_deshadow_with_cloud_mask_nosort(ref_list, cloud_mask_list=None, ref_c=0, threshold=0.2, nodata=0, return_mask_in_chanel_flag=False):
+    """
+    Merge deshadowed reflectance data with cloud mask data.
+
+    Parameters:
+    ref_list (list): List of reflectance data
+    cloud_mask_list (list, optional): List of cloud mask data, if not provided, it will be generated automatically
+    ref_c (int, optional): Reference channel, default is 0
+    threshold (float, optional): Threshold value, default is 0.2
+    nodata (int, optional): No data value, default is 0
+    return_mask_in_chanel_flag (bool, optional): Whether to return the mask in the channel, default is True
+
+    Returns:
+    np.ndarray or tuple: If return_mask_in_chanel_flag is True, returns the merged data; otherwise, returns the merged data and mask.
+    """
+    if cloud_mask_list is None:
+        cloud_mask_list = get_cloud_masks(ref_list)  # Generate cloud masks if not provided
+
+    ref_add_mask_list = add_to_chanel(ref_list, cloud_mask_list)  # Concatenate reflectance data with mask data
+
+    if len(ref_add_mask_list) > 1:
+        merge_data = merge_deshadow(ref_add_mask_list, ref_c=ref_c, threshold=threshold)  # Merge deshadowed data
+    else:
+        merge_data = ref_add_mask_list[0]  # If there is only one data, use it directly
+
+    if return_mask_in_chanel_flag:
+        return merge_data  # Return the merged data if mask is in the channel
+    else:
+        merge_data, merge_mask = split_from_chanel(merge_data)  # Otherwise, split the merged data and mask
+        return merge_data, merge_mask  # Return the split data and mask
 
 

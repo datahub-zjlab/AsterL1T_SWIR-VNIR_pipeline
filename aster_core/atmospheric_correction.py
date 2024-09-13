@@ -284,7 +284,7 @@ def get_dem_from_tile_bbox(geotiff_list, tile_bbox, tile_crs, tile_size=64):
         dem = np.mean(merged_tile_dem)
     else:
         dem = None
-    return dem
+    return dem,merged_tile_dem
 
 def get_dem_from_tile_bbox_list(geotiff_list, tile_bbox_list, tile_size=64):
     tile_dem_list = []
@@ -350,10 +350,9 @@ def get_atmospheric_correction_paras(meta,bands,aod,dem):
         a,b,c = retrieve_atmospheric_correction_paras(solar_z,solar_a,atmos_profile,aod,dem,band_id,month,day)
         if (a is None) or (b is None) or (c is None):
             a,b,c = py6s_coeffients(solar_z,solar_a,month,day,atmos_profile,band_id,dem,aod)
-        atmospheric_correction_paras[band]['a'] = np.round(a,4)
-        atmospheric_correction_paras[band]['b'] = np.round(b,4)
-        atmospheric_correction_paras[band]['c'] = np.round(c,4)
-    
+        atmospheric_correction_paras[band]['a'] = np.round(a,5)
+        atmospheric_correction_paras[band]['b'] = np.round(b,5)
+        atmospheric_correction_paras[band]['c'] = np.round(c,5)
     return atmospheric_correction_paras
 
 def atmospheric_correction_6s(radiance,bands,atmospheric_paras,nodata_value):

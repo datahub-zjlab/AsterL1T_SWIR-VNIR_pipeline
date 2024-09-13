@@ -49,7 +49,8 @@ def extract_data_from_geotifs(tile_bbox, tile_size,tile_crs,
 def extract_data_from_hdfs(tile_bbox, tile_size, tile_crs, bands,
                           granule_file_list,
                           padding=0, redundant=100,
-                          return_dst_transform_flag=False):
+                          return_dst_transform_flag=False,
+                          return_granule_id_flag=False):
     """
     Mosaic a tile from HDF files based on the given bounding box and size.
 
@@ -66,6 +67,7 @@ def extract_data_from_hdfs(tile_bbox, tile_size, tile_crs, bands,
     """
     ref_list = []
     meta_list = []
+    granule_id_list = []
     merge_data = None
 
     dst_transform = from_bounds(*tile_bbox, tile_size, tile_size)
@@ -81,11 +83,18 @@ def extract_data_from_hdfs(tile_bbox, tile_size, tile_crs, bands,
         if merged_matrix is not None:
             ref_list.append(merged_matrix)
             meta_list.append(meta)
+            granule_id_list.append(os.path.basename(hdf_file).split('.')[0])
 
     if return_dst_transform_flag:
-        return ref_list, meta_list, dst_transform
+        if return_granule_id_flag:
+            return ref_list, meta_list, granule_id_list, dst_transform
+        else:
+            return ref_list, meta_list, dst_transform
     else:
-        return ref_list, meta_list
+        if return_granule_id_flag:
+            return ref_list, meta_list, granule_id_list
+        else:
+            return ref_list, meta_list
     
 
 def extract_granule(hdf_file, bands, tile_bbox=None, tile_size=1024, dst_crs=None,
@@ -216,6 +225,9 @@ def extract_geotif(geotif_file, tile_bbox=None, tile_size=1024,
             dst_transform = geotransform
             tile_bbox = geotransform_to_bbox(geotransform,width,height)
             tile_bbox_dst = tile_bbox
+
+            if not isinstance(dst_transform,Affine):
+                dst_transform = geotransform_to_affine(dst_transform)
         
         else:
 

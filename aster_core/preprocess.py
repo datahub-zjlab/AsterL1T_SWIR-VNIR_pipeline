@@ -14,9 +14,12 @@ def set_boundary_inner_pixels_to_nodata(data, nodata_value=0, erosion_kernel_siz
         channel_mask = (data[i, :, :] != nodata_value).astype(np.uint8)
         mask *= channel_mask
     
-    # 对掩码进行腐蚀操作
+    # 对掩码进行孔洞填充操作
+    filled_mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, np.ones((6, 6), np.uint8))
+    
+    # 对填充后的掩码进行腐蚀操作
     kernel = np.ones((erosion_kernel_size, erosion_kernel_size), np.uint8)
-    eroded_mask = cv2.erode(mask, kernel, iterations=1)
+    eroded_mask = cv2.erode(filled_mask, kernel, iterations=1)
     
     # 取反掩码，以便将边界和内部像素区分开
     mask = ~eroded_mask.astype(bool)

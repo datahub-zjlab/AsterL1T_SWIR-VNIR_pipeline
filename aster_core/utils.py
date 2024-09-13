@@ -188,6 +188,25 @@ def geotransform_to_bbox(geotransform, width, height):
 
     return BoundingBox(left=x_min, bottom=y_min, right=x_max, top=y_max)
 
+def affine_to_bbox(affine, width, height):
+    """
+    Convert an affine transformation to a rasterio BoundingBox.
+
+    Parameters:
+    affine (Affine): Affine transformation object.
+    width (int): Width of the raster in pixels.
+    height (int): Height of the raster in pixels.
+
+    Returns:
+    BoundingBox: rasterio BoundingBox object.
+    """
+    # Calculate the coordinates of the bottom-left and top-right corners
+    x_min, y_max = affine * (0, 0)  # Top-left corner
+    x_max, y_min = affine * (width, height)  # Bottom-right corner
+
+    return BoundingBox(left=x_min, bottom=y_min, right=x_max, top=y_max)
+
+
 def expand_bbox(bbox,offset):
     # 原始边界框
     # 扩大边界框
