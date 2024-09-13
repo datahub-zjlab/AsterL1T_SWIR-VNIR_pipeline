@@ -1,4 +1,5 @@
 import oss2
+from oss2.exceptions import NoSuchKey
 import os
 from aster_core.token_config import accessKeyId, accessKeySecret, current_directory
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -16,7 +17,14 @@ def download_file_from_oss(url, bucket_name='geocloud', out_file='./tmp.hdf',
         if not oss_util_flag:
             # Bucket信息
             bucket = oss2.Bucket(auth, endpoint, bucket_name, region=region)
-            oss2.resumable_download(bucket, url, out_file, num_threads=4)
+            try:
+                oss2.resumable_download(bucket, url, out_file, num_threads=4)
+            except NoSuchKey:
+                print(f"File '{url}' does not exist in OSS.")
+                return None
+            except Exception as e:
+                print(f"An error occurred while downloading the file {url}: {e}")
+                return None
         else:
             cmd = f'{current_directory}/ossutil cp oss://{bucket_name}/{url} {out_file} --config-file {current_directory}/.ossutil_config > /dev/null 2>&1'
             os.system(cmd)
