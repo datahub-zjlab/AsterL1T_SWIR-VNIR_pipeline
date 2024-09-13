@@ -1,6 +1,7 @@
 import numpy as np
 from rasterio.coords import BoundingBox
 from rasterio.transform import from_bounds
+from aster_core.utils import bbox2bbox,bbox2polygon
 import math
 
 class GlobalRasterGrid:
@@ -82,6 +83,13 @@ class GlobalRasterGrid:
         top = self.top + tile_y * self.res_y * self.tile_size
         bottom = top + self.res_y * self.tile_size
         return BoundingBox(left=left, bottom=bottom, right=right, top=top)
+    
+    def get_tile_polygon(self,*args,output_crs=None):
+        tile_bbox = self.get_tile_bounds(*args)
+        if not output_crs is None:
+            tile_bbox = bbox2bbox(tile_bbox,self.projection,output_crs)
+        tile_polygon = bbox2polygon(tile_bbox)
+        return tile_polygon
 
     def get_tile_index(self, bounds):
         # Calculate the tile indices that intersect with the given bounds
