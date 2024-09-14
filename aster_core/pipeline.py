@@ -244,66 +244,6 @@ def process_modis_ref_data(tile_bbox, tile_size, tile_crs, modis_ref_file_list):
         modis_ref = None
     return modis_ref
 
-def tile_pipeline_return_all(tile_bbox, tile_size, tile_crs, bands,
-                             aster_tmp_dir, aod_tmp_dir, dem_tmp_dir, modis_ref_tmp_dir,
-                             aster_bucket_name='geocloud',
-                             aod_bucket_name='aster-data-storage',
-                             dem_bucket_name='aster-data-storage',
-                             modis_ref_bucket_name='geocloud',
-                             time_start='2000-01-01', time_end='2008-01-01', cloud_cover=30, aster_file_list=None):
-
-    tile_region = bbox2polygon(bbox2bbox(tile_bbox, tile_crs, 'epsg:4326'))
-
-    if aster_file_list is None:
-        aster_file_list = download_aster_files(tile_region, time_start, time_end, cloud_cover, aster_tmp_dir, aster_bucket_name)
-
-    aster_radiance_list, aster_toa_list, meta_list, granule_list = process_aster_data(tile_bbox, tile_size, tile_crs, bands, aster_file_list)
-
-    dem_file_list = download_dem_files(tile_region, dem_tmp_dir, dem_bucket_name)
-    dem = process_dem_data(dem_file_list, tile_bbox, tile_crs, tile_size)
-
-    if (not dem is None) and (not dem is np.nan):
-        aster_reflectance_list = []
-        atmospheric_correction_paras_list = []
-        reflectance_meta_list = []
-        reflectance_granule_list = []
-        for aster_radiance, meta, aster_granule_id in zip(aster_radiance_list, meta_list, granule_list):
-            observation_time = datetime.strptime(meta['SETTINGTIMEOFPOINTING.1'], '%Y-%m-%dT%H:%M:%SZ')
-            aod_file_list = download_aod_files(tile_region, observation_time, aod_tmp_dir, aod_bucket_name)
-            aod = process_aod_data(aod_file_list, tile_bbox, tile_crs, tile_size)
-            if (not aod is None) and (not aod is np.nan):
-                reflectance_list, correction_paras_list = process_reflectance_data([aster_radiance], [meta], [aster_granule_id], bands, aod, dem)
-                aster_reflectance_list.extend(reflectance_list)
-                atmospheric_correction_paras_list.extend(correction_paras_list)
-                reflectance_meta_list.append(meta)
-                reflectance_granule_list.append(aster_granule_id)
-    else:
-        aster_reflectance_list = None
-
-    if len(aster_reflectance_list) > 1:
-        reflectance_cloud_mask_list = get_cloud_masks(aster_reflectance_list)
-        merge_ref_data, reflectance_merge_mask = merge_deshadow_with_cloud_mask_nosort(aster_reflectance_list, reflectance_cloud_mask_list, return_mask_in_chanel_flag=False)
-
-    if len(aster_toa_list) > 1:
-        toa_cloud_mask_list = get_cloud_masks(aster_toa_list)
-        merge_toa_data, toa_merge_mask = merge_deshadow_with_cloud_mask_nosort(aster_toa_list, toa_cloud_mask_list, return_mask_in_chanel_flag=False)
-
-    modis_ref_file_list = download_modis_ref_files(tile_bbox, modis_ref_tmp_dir, modis_ref_bucket_name)
-    modis_ref = process_modis_ref_data(tile_bbox, tile_size, tile_crs, modis_ref_file_list)
-
-    ct_data = color_transfer(merge_ref_data, modis_ref)
-
-    result = common_used_functional_group(ct_data)
-
-    if not result is None:
-        result = add_to_chanel(result, reflectance_merge_mask)
-
-    return aster_radiance_list, aster_toa_list, atmospheric_correction_paras_list, aster_reflectance_list, reflectance_cloud_mask_list, merge_toa_data, merge_ref_data, ct_data, modis_ref, result, reflectance_meta_list, reflectance_granule_list
-
-import os
-from datetime import datetime, timedelta
-import numpy as np
-
 class TilePipeline:
     def __init__(self, tile_bbox, tile_size, tile_crs, bands,
                  aster_tmp_dir, aod_tmp_dir, dem_tmp_dir, modis_ref_tmp_dir,
