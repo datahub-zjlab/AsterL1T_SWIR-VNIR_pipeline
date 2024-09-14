@@ -100,9 +100,9 @@ class GlobalRasterGrid:
 
         # Calculate the range of tile indices that intersect with the bounds
         min_x = max(math.floor(left_offset), 0)
-        max_x = min(math.ceil(right_offset) - 1, self.get_tile_count()[0] - 1)
+        max_x = min(math.ceil(right_offset), self.get_tile_count()[0])
         min_y = max(math.floor(upper_offset), 0)
-        max_y = min(math.ceil(lower_offset) - 1, self.get_tile_count()[1] - 1)
+        max_y = min(math.ceil(lower_offset), self.get_tile_count()[1])
         return min_x, max_x, min_y, max_y
     
     def get_tile_list(self,bounds):
