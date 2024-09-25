@@ -1,4 +1,5 @@
 import numpy as np
+from shapely import Point
 from rasterio.coords import BoundingBox
 from rasterio.transform import from_bounds
 from aster_core.utils import bbox2bbox,bbox2polygon
@@ -91,7 +92,24 @@ class GlobalRasterGrid:
         tile_polygon = bbox2polygon(tile_bbox)
         return tile_polygon
 
-    def get_tile_index(self, bounds):
+    def get_tile_index(self, input):
+        if isinstance(input, tuple):
+            if len(input) == 2:
+                x, y = input
+                bounds = BoundingBox(left=x,right=x,top=y,bottom=y)
+            elif len(input) == 4:
+                bounds = input
+            else:
+                raise ValueError("Tuple must contain exactly two elements (x, y).")
+        elif isinstance(input, Point):
+            x, y = input.x, input.y
+            bounds = BoundingBox(left=x,right=x,top=y,bottom=y)
+        # elif isinstance(input, (int, float)):
+        #     x, y = input, input
+        #     bounds = BoundingBox(left=x,right=x,top=y,bottom=y)
+        else: 
+            raise ValueError("Unsupported input type.")
+
         # Calculate the tile indices that intersect with the given bounds
         left_offset = (bounds.left - self.left) / (self.res_x*self.tile_size)
         right_offset = (bounds.right - self.left) / (self.res_x*self.tile_size)
@@ -100,13 +118,14 @@ class GlobalRasterGrid:
 
         # Calculate the range of tile indices that intersect with the bounds
         min_x = max(math.floor(left_offset), 0)
-        max_x = min(math.ceil(right_offset), self.get_tile_count()[0])
+        max_x = min(math.floor(right_offset), self.get_tile_count()[0])
         min_y = max(math.floor(upper_offset), 0)
-        max_y = min(math.ceil(lower_offset), self.get_tile_count()[1])
+        max_y = min(math.floor(lower_offset), self.get_tile_count()[1])
+
         return min_x, max_x, min_y, max_y
     
-    def get_tile_list(self,bounds):
-        min_x, max_x, min_y, max_y = self.get_tile_index(bounds)
+    def get_tile_list(self, input):
+        min_x, max_x, min_y, max_y = self.get_tile_index(input)
         coordinates = [(x, y) for x in range(min_x, max_x + 1) for y in range(min_y, max_y + 1)]
         return coordinates
 

@@ -34,7 +34,19 @@ def download_file_from_oss(url, bucket_name='geocloud', out_file='./tmp.hdf',
         
     return out_file
 
-def upload_file_to_oss(url, in_file, bucket_name='geocloud'):
+import contextlib
+import io
+
+def suppress_print(func):
+    def wrapper(*args, **kwargs):
+        # 使用 io.StringIO 捕获标准输出
+        with contextlib.redirect_stdout(io.StringIO()):
+            result = func(*args, **kwargs)
+        return result
+    return wrapper
+
+@suppress_print
+def upload_file_to_oss(url, in_file, bucket_name='geocloud',print_flag=False):
     if os.path.exists(in_file):
         # 配置访问凭证
         auth = oss2.Auth(accessKeyId, accessKeySecret)
@@ -43,12 +55,16 @@ def upload_file_to_oss(url, in_file, bucket_name='geocloud'):
         endpoint = 'oss-cn-hangzhou-zjy-d01-a.ops.cloud.zhejianglab.com/'
         region = 'cn-hangzhou'
 
-
         bucket = oss2.Bucket(auth, endpoint, bucket_name, region=region)
-        oss2.resumable_upload(bucket, url, in_file, num_threads=4)
 
+        # 检查OSS上是否已经存在该文件
+        if not bucket.object_exists(url):
+            oss2.resumable_upload(bucket, url, in_file, num_threads=2)
+        else:
+            if print_flag:
+                print(f'File {url} already exists in OSS, skipping upload.')
     else:
-        # print(f'Already download {out_file}, skip')
-        pass
+        if print_flag:
+            print(f'File {in_file} does not exist locally, skipping upload.')
         
     return in_file

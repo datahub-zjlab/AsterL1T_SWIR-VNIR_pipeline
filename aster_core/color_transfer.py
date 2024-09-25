@@ -171,8 +171,8 @@ def brightnessBalance(aster_data,modis_data,bands = 9,tasseled_cap=False):
         aster_data_adjust[i] = aster_data[i] * (matched_brightness / aster_brightness)
     return aster_data_adjust
 
-def color_transfer(merged_matrix,reference_matrix,size=256,overlap = 100,auto = True,bandMatch=True,modisRange=[-100,16000],tasseled_cap=False):
-    data = color_transfer_block_dealingseam(merged_matrix,reference_matrix,size=256,overlap = 100,auto = True,bandMatch=True,modisRange=[-100,16000],tasseled_cap=False)
+def color_transfer(merged_matrix,reference_matrix,size=256,overlap = 100,auto = True,bandMatch=True,modisRange=[0,10000],tasseled_cap=False):
+    data = color_transfer_block_dealingseam(merged_matrix,reference_matrix,size=256,overlap = 100,auto = True,bandMatch=True,modisRange=[0,10000],tasseled_cap=False)
     return data
 
 """
