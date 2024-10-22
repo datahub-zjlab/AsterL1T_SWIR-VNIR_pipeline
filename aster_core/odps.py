@@ -1,6 +1,4 @@
-import os
 import numpy as np
-from odps import ODPS
 import re
 
 def restore_matrix_from_result(result, bands):

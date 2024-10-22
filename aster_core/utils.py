@@ -1,6 +1,6 @@
 import numpy as np
 from rasterio.coords import BoundingBox
-from rasterio.warp import transform_bounds,transform
+from rasterio.warp import transform_bounds
 from shapely.geometry import box,Polygon
 from rasterio.transform import Affine
 
@@ -165,6 +165,26 @@ def geotransform_to_affine(geotransform):
     affine = Affine(pixelWidth, rotationX, originX, rotationY, pixelHeight, originY)
 
     return affine
+
+def affine_to_geotransform(affine):
+    """
+    Convert rasterio's affine format to GDAL's geotransform.
+
+    :param affine: rasterio's affine transformation
+    :return: GDAL's geotransform, in the form of (top left X, pixel width, rotation, top left Y, rotation, pixel height)
+    """
+    # 提取 affine 变换的元素
+    pixelWidth = affine.a
+    rotationX = affine.b
+    originX = affine.c
+    rotationY = affine.d
+    pixelHeight = affine.e
+    originY = affine.f
+
+    # 创建 geotransform
+    geotransform = (originX, pixelWidth, rotationX, originY, rotationY, pixelHeight)
+
+    return geotransform
 
 def geotransform_to_bbox(geotransform, width, height):
     """

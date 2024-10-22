@@ -2,7 +2,7 @@ import numpy as np
 from shapely import Point
 from rasterio.coords import BoundingBox
 from rasterio.transform import from_bounds
-from aster_core.utils import bbox2bbox,bbox2polygon
+from aster_core.utils import bbox2bbox,bbox2polygon,affine_to_geotransform
 import math
 
 class GlobalRasterGrid:
@@ -64,10 +64,14 @@ class GlobalRasterGrid:
         num_tiles_y = np.floor((self.bottom - self.top) / (self.res_y*self.tile_size)) # from top to bottom
         return int(num_tiles_x), int(num_tiles_y)
 
-    def get_tile_geotransform(self,*args):
+    def get_tile_geotransform(self,*args,affine_flag=True):
         tile_bbox = self.get_tile_bounds(*args)
-        geotranform = from_bounds(*tile_bbox, self.tile_size, self.tile_size)
-        return geotranform
+        affine = from_bounds(*tile_bbox, self.tile_size, self.tile_size)
+        geotransform = affine_to_geotransform(affine)
+        if affine_flag:
+            return affine
+        else:
+            return geotransform
 
     def get_tile_bounds(self, *args):
         # Check if the input is a single tuple or two separate arguments

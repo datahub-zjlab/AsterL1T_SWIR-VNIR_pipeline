@@ -2,7 +2,14 @@ import oss2
 from oss2.exceptions import NoSuchKey
 import os
 from aster_core.token_config import accessKeyId, accessKeySecret, current_directory
-from concurrent.futures import ThreadPoolExecutor, as_completed
+
+def get_bucket(bucket_name):
+    auth = oss2.Auth(accessKeyId, accessKeySecret)
+    # Endpoint和Region
+    endpoint = 'oss-cn-hangzhou-zjy-d01-a.ops.cloud.zhejianglab.com/'
+    region = 'cn-hangzhou'
+    bucket = oss2.Bucket(auth, endpoint, bucket_name, region=region)
+    return bucket
 
 def download_file_from_oss(url, bucket_name='geocloud', out_file='./tmp.hdf',
                            overwrite=False, oss_util_flag=False):

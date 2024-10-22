@@ -1,20 +1,6 @@
 import psycopg2
-from psycopg2.extras import DictCursor
-from shapely.geometry import Polygon
 from shapely.wkt import dumps, loads
-from datetime import datetime, timedelta
-
-# Function to retrieve files based on spatial, temporal, and cloud cover criteria
-import psycopg2
-from shapely.wkt import dumps, loads
-
-params = {
-        "dbname": "asterl1tmeta",
-        "user": "postgres",
-        "password": "p0st.9res",
-        "host": "10.15.25.124",
-        "port": "5432"
-    }
+from token_config import params
 
 # Function to retrieve files based on spatial, temporal, and cloud cover criteria
 def retrieve_files(region, time_start='2000-01-01', time_end='2008-01-01', cloud_cover=101, download_flag=True):
@@ -28,14 +14,6 @@ def retrieve_files(region, time_start='2000-01-01', time_end='2008-01-01', cloud
     Returns: 
     oss_url, producer_granule_id, ST_AsText(polygon), cloud_cover
     """
-    # Database connection parameters
-    # params = {
-    #     "dbname": "asterl1tmeta",
-    #     "user": "postgres",
-    #     "password": "p0st.9res",
-    #     "host": "10.15.25.124",
-    #     "port": "5432"
-    # }
 
     conn = psycopg2.connect(**params)
     cur = conn.cursor()
@@ -134,14 +112,6 @@ def retrieve_aod_files(region, time_start='2000-01-01', time_end='2008-01-01'):
     Returns: 
     aod_file, begin_time
     """
-    # Database connection parameters
-    # params = {
-    #     "dbname": "asterl1tmeta",
-    #     "user": "postgres",
-    #     "password": "p0st.9res",
-    #     "host": "10.15.25.124",
-    #     "port": "5432"
-    # }
 
     conn = psycopg2.connect(**params)
     cur = conn.cursor()
@@ -214,14 +184,6 @@ def retrieve_gdem_files(region):
     Returns: 
     gdem_file
     """
-    # Database connection parameters
-    # params = {
-    #     "dbname": "asterl1tmeta",
-    #     "user": "postgres",
-    #     "password": "postgres",
-    #     "host": "10.15.25.124",
-    #     "port": "5432"
-    # }
 
     conn = psycopg2.connect(**params)
     cur = conn.cursor()

@@ -1,9 +1,7 @@
 import re
-import json
 from datetime import datetime
-from osgeo import gdal, osr
+from pyproj import CRS
 import numpy as np
-import cv2
 
 aster_bands = ['VNIR_Swath:ImageData1','VNIR_Swath:ImageData2','VNIR_Swath:ImageData3',
          'SWIR_Swath:ImageData4','SWIR_Swath:ImageData5','SWIR_Swath:ImageData6',
@@ -158,11 +156,11 @@ def get_width_height(meta_parser,band_desc):
     nrow = int(meta_parser['imagedatainfomation'][bn_key].split(', ')[0])
     return nrow,ncol
 
-
 def get_projection(meta_parser):
-    srs = osr.SpatialReference()
-    srs.ImportFromEPSG(meta_parser['utm_zone'])
-    projection = srs.ExportToWkt()
+    # 使用 pyproj 创建 CRS 对象
+    crs = CRS.from_epsg(meta_parser['utm_zone'])
+    # 导出为 WKT 格式
+    projection = crs.to_wkt()
     return projection
 
 def get_ucc1(meta_parser,band_desc):

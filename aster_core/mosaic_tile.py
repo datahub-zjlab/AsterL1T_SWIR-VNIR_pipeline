@@ -1,16 +1,22 @@
 import os
 import numpy as np
-from osgeo import gdal
 import re
 
-from rasterio.crs import CRS
+# from rasterio.crs import CRS
+from pyproj import CRS
 from rasterio.transform import from_bounds, Affine
 from rasterio.warp import reproject, Resampling
 
 from aster_core.utils import bbox2bbox, bbox_to_pixel_offsets, geotransform_to_affine, get_sub_geotransform, geotransform_to_bbox,get_width_height_from_bbox_affine
-from aster_core.hdf_utils import parse_meta,get_projection,get_transform,get_width_height
+from aster_core.hdf_utils import parse_meta,get_projection,get_transform
 
 no_overlap_padding = 1
+
+def read_data(data_path):
+    from osgeo import gdal
+    ds = gdal.Open(data_path)
+    return ds
+
 
 def extract_data_from_geotifs(tile_bbox, tile_size,tile_crs,
                              granule_file_list,
@@ -120,7 +126,7 @@ def extract_granule(hdf_file, bands, tile_bbox=None, tile_size=1024, dst_crs=Non
         affine.Affine: Destination transform if return_dst_transform_flag is True.
     """
     try:
-        hdf_ds = gdal.Open(hdf_file)
+        hdf_ds = read_data(hdf_file)
         meta = hdf_ds.GetMetadata()
         sds = hdf_ds.GetSubDatasets()
         sds_data = {}
@@ -143,7 +149,7 @@ def extract_granule(hdf_file, bands, tile_bbox=None, tile_size=1024, dst_crs=Non
                 sds_path = sds_info[0]
                 match = re.search(ref_band, sds_path)
                 if match:
-                    sub_ds = gdal.Open(sds_path)
+                    sub_ds = read_data(sds_path)
                     width = sub_ds.RasterYSize
                     height = sub_ds.RasterXSize
                     sub_ds = None
@@ -210,7 +216,7 @@ def extract_geotif(geotif_file, tile_bbox=None, tile_size=1024,
     Returns:
         np.ndarray: Processed and reprojected matrix of the geotiff.
     """
-    ds = gdal.Open(geotif_file)
+    ds = read_data(geotif_file)
 
     if ds is not None:
 
@@ -287,7 +293,7 @@ def extract_subdataset(sds_path, tile_bbox, dst_crs, dst_transform, padding=0, r
     Returns:
         np.ndarray: Processed and reprojected matrix of the subdataset.
     """
-    ds = gdal.Open(sds_path)
+    ds = read_data(sds_path)
     if ds is not None:
         # Get metadata from the dataset
         meta = ds.GetMetadata()

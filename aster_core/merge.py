@@ -1,6 +1,5 @@
 import numpy as np
 from aster_core.cloud import get_cloud_masks,add_to_chanel,split_from_chanel
-import time
 import copy
 
 def merge_min(ref_list, ref_c=0):
