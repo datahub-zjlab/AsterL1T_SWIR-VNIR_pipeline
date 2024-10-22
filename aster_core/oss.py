@@ -1,7 +1,7 @@
 import oss2
 from oss2.exceptions import NoSuchKey
 import os
-from aster_core.token_config import accessKeyId, accessKeySecret, current_directory
+from aster_core.token_config import accessKeyId, accessKeySecret
 
 def get_bucket(bucket_name):
     auth = oss2.Auth(accessKeyId, accessKeySecret)
@@ -32,9 +32,9 @@ def download_file_from_oss(url, bucket_name='geocloud', out_file='./tmp.hdf',
             except Exception as e:
                 print(f"An error occurred while downloading the file {url}: {e}")
                 return None
-        else:
-            cmd = f'{current_directory}/ossutil cp oss://{bucket_name}/{url} {out_file} --config-file {current_directory}/.ossutil_config > /dev/null 2>&1'
-            os.system(cmd)
+        # else:
+        #     cmd = f'{current_directory}/ossutil cp oss://{bucket_name}/{url} {out_file} --config-file {current_directory}/.ossutil_config > /dev/null 2>&1'
+        #     os.system(cmd)
     else:
         # print(f'Already download {out_file}, skip')
         pass
