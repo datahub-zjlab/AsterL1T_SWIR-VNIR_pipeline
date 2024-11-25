@@ -130,13 +130,21 @@ def extract_granule(hdf_file, bands, tile_bbox=None, tile_size=1024, dst_crs=Non
         sds = hdf_ds.GetSubDatasets()
         sds_data = {}
 
-        if (tile_bbox is None) or (dst_crs is None):
-            if ref_band is None:
-                ref_band = bands[-1]
+        if ref_band is None:
+            ref_band = bands[-1]
 
-            if hdf_ds.GetProjection():
-                projection = CRS.from_wkt(hdf_ds.GetProjection())
-                geotransform = hdf_ds.GetGeoTransform()
+        for sds_info in sds:
+            sds_path = sds_info[0]
+            match = re.search(ref_band, sds_path)
+            if match:
+                sub_ds = read_data(sds_path)
+                width = sub_ds.RasterYSize
+                height = sub_ds.RasterXSize
+                
+        if (tile_bbox is None) or (dst_crs is None):
+            if sub_ds.GetProjection():
+                projection = CRS.from_wkt(sub_ds.GetProjection())
+                geotransform = sub_ds.GetGeoTransform()
             else:
                 # TODO Only for ASTER L1T now
                 meta_parser = parse_meta(meta)
@@ -144,14 +152,6 @@ def extract_granule(hdf_file, bands, tile_bbox=None, tile_size=1024, dst_crs=Non
                 geotransform = get_transform(meta_parser, ref_band)
 
                 # width,height = get_width_height(meta_parser,ref_band)
-            for sds_info in sds:
-                sds_path = sds_info[0]
-                match = re.search(ref_band, sds_path)
-                if match:
-                    sub_ds = read_data(sds_path)
-                    width = sub_ds.RasterYSize
-                    height = sub_ds.RasterXSize
-                    sub_ds = None
             
             dst_transform = geotransform
             tile_bbox = geotransform_to_bbox(dst_transform,width,height)
@@ -159,9 +159,10 @@ def extract_granule(hdf_file, bands, tile_bbox=None, tile_size=1024, dst_crs=Non
 
         else:
             if dst_transform is None:
-                dst_transform = from_bounds(*tile_bbox, tile_size, tile_size)
+                dst_transform = from_bounds(*tile_bbox, width=tile_size, height=tile_size)
 
         hdf_ds = None
+        sub_ds = None
 
         # Process each subdataset
         for band_desc in bands:

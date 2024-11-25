@@ -40,13 +40,16 @@ def extract_sub_bbox_offsets(bbox, merged_bbox, RasterYSize, RasterXSize, redund
 
     return start_row, start_col, end_row, end_col
 
-def extract_sub_data_from_sub_bbox(data,bbox_list,merged_bbox,redundant=1):
+def extract_sub_data_from_sub_bbox(data,bbox_list,merged_bbox,redundant=1,nanmean_flag=True):
     # data is np.array([RasterXSize,RasterYSize])
     RasterYSize, RasterXSize = np.shape(data)
     sub_data_list = []
     for bbox in bbox_list:
         start_row, start_col, end_row, end_col = extract_sub_bbox_offsets(bbox, merged_bbox, RasterYSize, RasterXSize, redundant=redundant)
-        sub_data_list.append(np.nanmean(data[start_row:end_row,start_col:end_col]))
+        if nanmean_flag:
+            sub_data_list.append(np.nanmean(data[start_row:end_row,start_col:end_col]))
+        else:
+            sub_data_list.append(data[start_row:end_row,start_col:end_col])
     return sub_data_list
 
 # 1. from polygon to bbox
@@ -254,3 +257,43 @@ def get_width_height_from_bbox_affine(bbox,affine):
     width = int((x_max - x_min) / pixel_width)
     height = int((y_max - y_min) / pixel_height)
     return width,height
+
+def bbox_to_geotransform(bbox, resolution):
+    """
+    Convert a rasterio BoundingBox to a GDAL geotransform tuple.
+
+    Parameters:
+    bbox (BoundingBox): rasterio BoundingBox object.
+    resolution (float): Resolution of the raster in geographic units per pixel.
+
+    Returns:
+    tuple: GDAL geotransform tuple (x_origin, pixel_width, x_rotation, y_origin, y_rotation, pixel_height).
+    """
+    x_min, y_min, x_max, y_max = bbox.left, bbox.bottom, bbox.right, bbox.top
+
+    # Calculate width and height in pixels
+    width = (x_max - x_min) / resolution
+    height = (y_max - y_min) / resolution
+
+    # Create the geotransform tuple
+    geotransform = (x_min, resolution, 0, y_max, 0, -resolution)
+
+    return geotransform
+
+def bbox_to_affine(bbox, resolution):
+    """
+    Convert a rasterio BoundingBox to an affine transformation.
+
+    Parameters:
+    bbox (BoundingBox): rasterio BoundingBox object.
+    resolution (float): Resolution of the raster in geographic units per pixel.
+
+    Returns:
+    Affine: Affine transformation object.
+    """
+    x_min, y_min, x_max, y_max = bbox.left, bbox.bottom, bbox.right, bbox.top
+
+    # Create the affine transformation
+    affine = Affine.translation(x_min, y_max) * Affine.scale(resolution, -resolution)
+
+    return affine

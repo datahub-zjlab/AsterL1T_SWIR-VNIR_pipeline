@@ -85,8 +85,8 @@ def parse_meta(meta):
     n_s = np.float64(meta['NORTHBOUNDINGCOORDINATE'])
 
     # Create UTM zone code numbers
-    utm_n = [i + 32600 for i in range(60)]
-    utm_s = [i + 32700 for i in range(60)]
+    utm_n = [i + 32600 for i in range(62)]
+    utm_s = [i + 32700 for i in range(62)]
 
     # Define UTM zone based on North or South
     if n_s < 0:

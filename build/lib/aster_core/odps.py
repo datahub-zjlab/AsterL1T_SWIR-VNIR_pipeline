@@ -23,7 +23,8 @@ def restore_matrix_from_result(result, bands):
     # 从result中获取压缩后的数据
     compressed_data = []
     for band in bands:
-        hex_string = result[band].decode('utf-8')
+        # hex_string = result[band].decode('utf-8')
+        hex_string = result[band]
         byte_data = bytes.fromhex(hex_string)
         band_data = np.frombuffer(byte_data, dtype=np.uint8)
         compressed_data.append(band_data)
@@ -34,6 +35,8 @@ def restore_matrix_from_result(result, bands):
     
     # 将压缩后的数据填充回原始矩阵中
     restored_matrix[:, min_row:max_row+1, min_col:max_col+1] = compressed_data
+
+    restored_matrix = np.squeeze(restored_matrix)
     
     return restored_matrix
 
@@ -97,3 +100,14 @@ def transfer_matrix_to_odps_table_column(data,bands,zip_flag=False):
         for i, band in enumerate(bands):
             result[band] = matrix_to_byte(data[i])
     return result
+
+def upload_data_to_odps(result_list, table, key_list=None):
+    # Open a writer to write data to the table
+    if key_list is None:
+        key_list = result_list[0].keys()
+    with table.open_writer(blocks=None) as writer:
+        record_list = []
+        for data in result_list:
+            record = [data[key] for key in key_list]
+            record_list.append(record)
+        writer.write(record_list)
