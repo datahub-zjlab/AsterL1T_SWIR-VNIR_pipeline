@@ -1,6 +1,6 @@
 import psycopg2
 from shapely.wkt import dumps, loads
-from token_config import params
+from aster_core.token_config import params
 
 # Function to retrieve files based on spatial, temporal, and cloud cover criteria
 def retrieve_files(region, time_start='2000-01-01', time_end='2008-01-01', cloud_cover=101, download_flag=True):
@@ -24,7 +24,7 @@ def retrieve_files(region, time_start='2000-01-01', time_end='2008-01-01', cloud
     if download_flag:  # Only return data that has been downloaded to OSS
         if region is not None:
             retrieve_query = """
-            SELECT oss_url, producer_granule_id, ST_AsText(polygon), cloud_cover
+            SELECT oss_url, producer_granule_id, ST_AsText(polygon), cloud_cover, time_end
             FROM aster_metadata
             WHERE (CASE 
                 WHEN ST_Area(polygon) < ST_Area(ST_ShiftLongitude(polygon)) THEN ST_Intersects(polygon, ST_GeomFromText(%s, 4326))
@@ -38,7 +38,7 @@ def retrieve_files(region, time_start='2000-01-01', time_end='2008-01-01', cloud
             """
         else:
             retrieve_query = """
-            SELECT oss_url, producer_granule_id, ST_AsText(polygon), cloud_cover
+            SELECT oss_url, producer_granule_id, ST_AsText(polygon), cloud_cover, time_end
             FROM aster_metadata
             WHERE time_end > %s
             AND time_end < %s
@@ -49,7 +49,7 @@ def retrieve_files(region, time_start='2000-01-01', time_end='2008-01-01', cloud
     else:  # Return all Aster data
         if region is not None:
             retrieve_query = """
-            SELECT hdf_link, producer_granule_id, ST_AsText(polygon), cloud_cover
+            SELECT hdf_link, producer_granule_id, ST_AsText(polygon), cloud_cover, time_end
             FROM aster_metadata
             WHERE (CASE 
                 WHEN ST_Area(polygon) < ST_Area(ST_ShiftLongitude(polygon)) THEN ST_Intersects(polygon, ST_GeomFromText(%s, 4326))
@@ -62,7 +62,7 @@ def retrieve_files(region, time_start='2000-01-01', time_end='2008-01-01', cloud
             """
         else:
             retrieve_query = """
-            SELECT hdf_link, producer_granule_id, ST_AsText(polygon), cloud_cover
+            SELECT hdf_link, producer_granule_id, ST_AsText(polygon), cloud_cover, time_end
             FROM aster_metadata
             WHERE time_end > %s
             AND time_end < %s
@@ -87,8 +87,9 @@ def retrieve_files(region, time_start='2000-01-01', time_end='2008-01-01', cloud
             granule_id = row[1]  # producer_granule_id
             polygon = loads(row[2])  # polygon
             cloud_cover = row[3]  # cloud_cover
+            time_end = row[4]
             # if polygon.area < 20: # remove bad polygons TODO fix bad polygons
-            result_dict[granule_id] = {'file_url': file_url, 'polygon': polygon, 'cloud_cover': cloud_cover}
+            result_dict[granule_id] = {'file_url': file_url, 'polygon': polygon, 'cloud_cover': cloud_cover, 'time': time_end}
 
         return result_dict
 

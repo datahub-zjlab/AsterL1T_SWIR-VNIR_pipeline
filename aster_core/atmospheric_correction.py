@@ -1,5 +1,4 @@
 import numpy as np
-from Py6S import *
 import numpy as np
 import pandas as pd
 from datetime import datetime
@@ -7,10 +6,6 @@ import json
 import sqlite3
 import os
 import re
-
-import warnings
-# 忽略 RuntimeWarning: Mean of empty slice 警告
-warnings.filterwarnings("ignore", category=RuntimeWarning, message="Mean of empty slice")
 
 from aster_core.mosaic_tile import extract_granule,extract_geotif
 from aster_core.utils import extract_sub_data_from_sub_bbox,merge_bbox
@@ -20,45 +15,29 @@ from aster_core.hdf_utils import parse_meta
 script_path = os.path.abspath(__file__)
 script_dir = os.path.dirname(script_path)
 
-with open(os.path.join(script_dir,'resource','Aster_6s_date_coeff.json'), 'r') as file:
-    aster_6s_date_coeff = json.load(file)
-dbfile = os.path.join(script_dir,'resource','Aster_6s_lut_table.db')
-solarz_list = [0, 2, 4, 6] + list(range(7, 42, 8)) + list(range(43, 60, 4)) + list(range(61, 70, 2)) + list(range(71, 81, 1))
-aod_list = [2, 4, 6, 10, 20, 40, 70, 100, 150] + list(range(201, 801, 100)) + list(range(801, 2002, 400))
-dem_list = [0, 200, 1000, 2000, 4000, 8000]
-atmos_profile_list = ['1', '2', '3', '4', '5']
-band_id_list = [1, 2, 3, 4, 5, 6, 7, 8, 9]
-date_list = [datetime(2020, 1, 1), datetime(2020, 7, 1)]
-soa = 90
-
 def py6s_coeffients(soz,soa,month,day,atmos_profile,band_id, dem_value, aod_value):
-    # 6S模型
+    from Py6S import SixS,Geometry,AeroProfile,GroundReflectance,Altitudes,Wavelength,PredefinedWavelengths,AtmosCorr
     s = SixS()
     s.geometry = Geometry.User()
     s.geometry.solar_z = float(soz)
     s.geometry.solar_a = float(soa)
     s.geometry.view_z = 0
     s.geometry.view_a = 0
-    # 日期
     s.geometry.month = int(month)
     s.geometry.day = int(day)
 
-    # 大气模式类型
     s.atmos_profile = atmos_profile
     # s.atmos_profile = AtmosProfile.UserWaterAndOzone(1,0.35) 
 
-    # 气溶胶模式类型
     s.aero_profile = AeroProfile.PredefinedType(AeroProfile.Continental)
     s.ground_reflectance = GroundReflectance.HomogeneousLambertian(0.36)
 
-    # 550nm气溶胶光学厚度(Modis AOD)
     s.aot550 = aod_value * 0.001 
 
     s.altitudes = Altitudes()
     s.altitudes.set_target_custom_altitude(dem_value * 0.001)
     s.altitudes.set_sensor_satellite_level()
 
-    # 校正波段（根据波段名称）
     band_mapping = {
         1: 'ASTER_B1',
         2: 'ASTER_B2',
@@ -73,7 +52,6 @@ def py6s_coeffients(soz,soa,month,day,atmos_profile,band_id, dem_value, aod_valu
 
     s.wavelength = Wavelength(getattr(PredefinedWavelengths, band_mapping[band_id]))
 
-    # 下垫面非均一、朗伯体
     s.atmos_corr = AtmosCorr.AtmosCorrBRDFFromRadiance(-0.1)
     # wavelengths, res = SixSHelpers.Wavelengths.run_wavelengths(s,[s.wavelength])
     s.run()
@@ -85,6 +63,9 @@ def py6s_coeffients(soz,soa,month,day,atmos_profile,band_id, dem_value, aod_valu
     return a, b, c
 
 def find_nearest_neighbors(value_list, value):
+
+    solarz_list = [0, 2, 4, 6] + list(range(7, 42, 8)) + list(range(43, 60, 4)) + list(range(61, 70, 2)) + list(range(71, 81, 1))
+    
     value_list.sort()  # 确保列表是有序的
     left = None
     right = None
@@ -141,6 +122,12 @@ def trilinear_interpolation(data,solar_z,aod,dem,solar_z_left,solar_z_right,aod_
     return a,b,c
 
 def retrieve_atmospheric_correction_paras(solar_z, solar_a, atmos_profile, aod, dem, band_id, month, day):
+    with open(os.path.join(script_dir,'resource','Aster_6s_date_coeff.json'), 'r') as file:
+        aster_6s_date_coeff = json.load(file)
+
+    solarz_list = [0, 2, 4, 6] + list(range(7, 42, 8)) + list(range(43, 60, 4)) + list(range(61, 70, 2)) + list(range(71, 81, 1))
+    aod_list = [2, 4, 6, 10, 20, 40, 70, 100, 150] + list(range(201, 801, 100)) + list(range(801, 2002, 400))
+    dem_list = [0, 200, 1000, 2000, 4000, 8000]
 
     if aod < 5:
         aod = 5
@@ -169,6 +156,7 @@ def retrieve_atmospheric_correction_paras(solar_z, solar_a, atmos_profile, aod, 
     return rough_a, rough_b, rough_c
 
 def retrieve_6sparaslut(solar_z_left, solar_z_right, atmos_profile, aod_left, aod_right, dem_left, dem_right, band_id, date_flag='upper'):
+    dbfile = os.path.join(script_dir,'resource','Aster_6s_lut_table.db')
     conn = sqlite3.connect(dbfile)
 
     if date_flag == 'upper':
@@ -245,12 +233,14 @@ def get_aod_from_tile_bbox_list(hdf_list, tile_bbox_list, tile_crs, tile_size=64
     tile_aod_list = []
     for hdf_file in hdf_list:
         try:
-            tile_aod = extract_granule(hdf_file, bands, merged_tile_bbox, tile_size, dst_crs=tile_crs)
+            tile_aod,meta = extract_granule(hdf_file, bands, tile_bbox=merged_tile_bbox, tile_size=tile_size, dst_crs=tile_crs)
             if not tile_aod is None:
-                    tile_aod = np.float32(tile_aod)
-                    tile_aod[tile_aod == nodata] = np.NaN
+                tile_aod = np.float32(tile_aod)
+                tile_aod[tile_aod == nodata] = np.NaN
+                tile_aod[tile_aod == 0] = np.NaN
+                if len(np.shape(tile_aod))==3:
                     tile_aod = np.nanmean(tile_aod, axis=0)
-                    tile_aod_list.append(tile_aod)
+                tile_aod_list.append(tile_aod)
         except:
             continue
     
@@ -262,9 +252,39 @@ def get_aod_from_tile_bbox_list(hdf_list, tile_bbox_list, tile_crs, tile_size=64
         merged_tile_aod = tile_aod_list[0]
         aod_list = extract_sub_data_from_sub_bbox(merged_tile_aod,tile_bbox_list,merged_tile_bbox)
     else:
-        aod_list = [None]*len(tile_bbox_list)
+        aod_list = [np.nan]*len(tile_bbox_list)
 
     return aod_list
+
+def get_default_aod(hdf_list,nodata=-28672):
+    from osgeo import gdal
+    bands = ['Optical_Depth_055']
+    tile_aod_list = []
+    for hdf_file in hdf_list:
+        try:
+            # tile_aod,meta = extract_granule(hdf_file, bands, tile_bbox=None, tile_size=tile_size)
+            ds = gdal.Open(f'HDF4_EOS:EOS_GRID:{hdf_file}:grid1km:Optical_Depth_055')
+            tile_aod = ds.ReadAsArray()
+            if not tile_aod is None:
+                tile_aod = np.float32(tile_aod)
+                tile_aod[tile_aod == nodata] = np.NaN
+                tile_aod[tile_aod == 0] = np.NaN
+                if len(np.shape(tile_aod))==3:
+                    tile_aod = np.nanmean(tile_aod, axis=0)
+                tile_aod_list.append(tile_aod)
+        except:
+            continue
+
+    if len(tile_aod_list)>1:
+        merged_tile_aod = np.stack(tile_aod_list,axis=0)
+        aod = np.nanmean(merged_tile_aod)
+    elif len(tile_aod_list)==1:
+        merged_tile_aod = tile_aod_list[0]
+        aod = np.nanmean(merged_tile_aod)
+    else:
+        aod = None
+
+    return aod
 
 def get_dem_from_tile_bbox(geotiff_list, tile_bbox, tile_crs, tile_size=64):
     tile_dem_list = []
@@ -283,15 +303,16 @@ def get_dem_from_tile_bbox(geotiff_list, tile_bbox, tile_crs, tile_size=64):
         merged_tile_dem = tile_dem_list[0]
         dem = np.mean(merged_tile_dem)
     else:
+        merged_tile_dem = None
         dem = None
     return dem,merged_tile_dem
 
-def get_dem_from_tile_bbox_list(geotiff_list, tile_bbox_list, tile_size=64):
+def get_dem_from_tile_bbox_list(geotiff_list, tile_bbox_list, tile_size=64, return_num_flag=False):
     tile_dem_list = []
     merged_tile_bbox = merge_bbox(tile_bbox_list)
     for tiff_file in geotiff_list:
         try:
-            tile_dem = extract_geotif(tiff_file, merged_tile_bbox, tile_size)
+            tile_dem = extract_geotif(tiff_file, merged_tile_bbox, tile_size, 'epsg:3857')
             if not tile_dem is None:
                 tile_dem_list.append(tile_dem)
         except:
@@ -299,14 +320,21 @@ def get_dem_from_tile_bbox_list(geotiff_list, tile_bbox_list, tile_size=64):
 
     if len(tile_dem_list) > 1:
         merged_tile_dem = merge_min(tile_dem_list)
-        dem_list = extract_sub_data_from_sub_bbox(merged_tile_dem,tile_bbox_list,merged_tile_bbox)
+        dem_tile_list = extract_sub_data_from_sub_bbox(merged_tile_dem,tile_bbox_list,merged_tile_bbox,nanmean_flag=False)
 
     elif len(tile_dem_list)==1:
         merged_tile_dem = tile_dem_list[0]
-        dem_list = extract_sub_data_from_sub_bbox(merged_tile_dem,tile_bbox_list,merged_tile_bbox)
+        dem_tile_list = extract_sub_data_from_sub_bbox(merged_tile_dem,tile_bbox_list,merged_tile_bbox,nanmean_flag=False)
 
     else:
         dem_list = [None]*len(tile_bbox_list)
+    
+    
+    dem_list = [np.nanmean(dem_tile[dem_tile>0]) for dem_tile in dem_tile_list]
+    dem_num_list = [np.sum(dem_tile>0) for dem_tile in dem_tile_list]
+
+    if return_num_flag:
+        return dem_list,dem_num_list
 
     return dem_list
 
@@ -316,6 +344,7 @@ def desc2id(band_desc):
     return id
 
 def cal_atmospheric_correction_paras(meta,bands,aod,dem):
+    from Py6S import AtmosProfile
     atmospheric_correction_paras = {}
 
     meta_parser = parse_meta(meta)
@@ -336,6 +365,7 @@ def cal_atmospheric_correction_paras(meta,bands,aod,dem):
     return atmospheric_correction_paras
 
 def get_atmospheric_correction_paras(meta,bands,aod,dem):
+    from Py6S import AtmosProfile
     atmospheric_correction_paras = {}
     meta_parser = parse_meta(meta)
     solar_z = float(meta_parser['solar_z'])

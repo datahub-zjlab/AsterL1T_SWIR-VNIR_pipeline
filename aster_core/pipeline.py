@@ -1,18 +1,21 @@
 import os
-from datetime import datetime, timedelta
-import numpy as np
 
-from aster_core.mosaic_tile import extract_data_from_hdfs,extract_data_from_geotifs
+import numpy as np
+from datetime import datetime, timedelta
+from rasterio.coords import BoundingBox
+from aster_core.mosaic_tile import extract_data_from_hdfs,extract_data_from_geotifs,extract_granule,extract_geotif
 from aster_core.preprocess import cal_radiance,cal_toa
 from aster_core.atmospheric_correction import get_aod_from_tile_bbox,get_dem_from_tile_bbox,get_atmospheric_correction_paras,atmospheric_correction_6s
 from aster_core.database import retrieve_files,retrieve_aod_files,retrieve_gdem_files
 from aster_core.oss import download_file_from_oss
-from aster_core.utils import bbox2bbox,bbox2polygon
+from aster_core.utils import bbox2bbox,bbox2polygon,geotransform_to_affine,affine_to_bbox
 from aster_core.cloud import get_cloud_masks
 from aster_core.merge import merge_deshadow_with_cloud_mask_nosort,merge_min,add_to_chanel
 from aster_core.color_transfer import color_transfer
 from aster_core.global_grid import modis_global_grid
 from aster_core.functional_group import common_used_functional_group
+from aster_core.odps import get_min_bounding_box,matrix_to_byte
+from aster_core.hdf_utils import parse_meta,get_transform,get_projection,get_width_height
 
 def tile_pipeline(tile_bbox,tile_size,tile_crs,bands,
                   aster_tmp_dir,aod_tmp_dir,dem_tmp_dir,modis_ref_tmp_dir,
@@ -136,6 +139,7 @@ def tile_pipeline(tile_bbox,tile_size,tile_crs,bands,
     
     return merge_toa_data,ct_data,result
 
+''' TODO ALREADY DONE IN CLASS TilePipeline
 def download_aster_files(tile_region, time_start, time_end, cloud_cover, aster_tmp_dir, aster_bucket_name):
     result = retrieve_files(tile_region, time_start=time_start, time_end=time_end, cloud_cover=cloud_cover, download_flag=True)
     aster_file_list = []
@@ -243,6 +247,7 @@ def process_modis_ref_data(tile_bbox, tile_size, tile_crs, modis_ref_file_list):
     else:
         modis_ref = None
     return modis_ref
+'''
 
 class TilePipeline:
     def __init__(self, tile_bbox, tile_size, tile_crs, bands,
@@ -440,15 +445,104 @@ class TilePipeline:
             'reflectance_granule_list': self.reflectance_granule_list
         }
 
-
 def odps_pipeline(aster_dn, meta, bands, atmospheric_paras, nodata_value=0):
     aster_radiance = cal_radiance(aster_dn,meta,bands,nodata_value=nodata_value)
     aster_toa = cal_toa(aster_radiance,meta,bands,nodata_value=nodata_value)
     aster_reflectance = atmospheric_correction_6s(aster_radiance,bands,atmospheric_paras,nodata_value=nodata_value)
+    return aster_radiance,aster_toa,aster_reflectance
 
-
-
+def process_tile(tile_index, input_file, global_grid, bands=None):
     
+    tile_bbox = global_grid.get_tile_bounds(tile_index)
+
+    if 'tif' in input_file:
+        data = extract_geotif(input_file, tile_bbox, global_grid.tile_size, global_grid.projection)
+
+    elif 'hdf' in input_file:
+        data,meta = extract_granule(input_file, bands, tile_bbox, global_grid.tile_size, global_grid.projection)
+
+    result = {}
+    tile_index_x, tile_index_y = tile_index
+    result['tile_index_x'] = tile_index_x
+    result['tile_index_y'] = tile_index_y
+
+    if data is not None:
+        zip_data, bounding_box_info = get_min_bounding_box(data)
+        # zip_data[zip_data<0]=1
+        zip_data = zip_data.astype(np.uint8)
+
+        if len(zip_data.shape)==2:
+            zip_data = np.expand_dims(zip_data,0)
+
+        min_row, min_col, max_row, max_col = bounding_box_info
+
+        result['min_row'] = min_row
+        result['min_col'] = min_col
+        result['max_row'] = max_row
+        result['max_col'] = max_col
+        result['tile_index_x'] = tile_index_x
+        result['tile_index_y'] = tile_index_y
+        result['tile_info'] = f'res-{global_grid.resolution}_tilesize-{global_grid.tile_size}'
+        
+        for i, band in enumerate(bands):
+            result[band] = matrix_to_byte(zip_data[i])
+
+    return result
+
+def get_bbox_from_geotiff(geotiff_path):
+    import rasterio
+    """
+    从GeoTIFF文件中获取边界框（Bounding Box）
+
+    :param geotiff_path: GeoTIFF文件的路径
+    :return: rasterio.coords.BoundingBox对象
+    """
+    with rasterio.open(geotiff_path) as src:
+        # 获取图像的宽度和高度
+        width = src.width
+        height = src.height
+
+        # 获取图像的变换矩阵
+        transform = src.transform
+
+        # 计算边界框的四个角点坐标
+        left = transform.c
+        top = transform.f
+        right = left + transform.a * width
+        bottom = top + transform.e * height
+
+        # 创建BoundingBox对象
+        bbox = BoundingBox(left=left, bottom=bottom, right=right, top=top)
+        return bbox
+    
+def get_bbox_from_aster(hdf_file, dst_crs='epsg:3857'):
+    from osgeo import gdal
+    """
+    从ASTER HDF文件中获取边界框信息，并转换为目标坐标系
+    
+    :param hdf_file: ASTER HDF文件路径
+    :param dst_crs: 目标坐标系，默认为'epsg:3857'
+    :return: 转换后的边界框
+    """
+    ds = gdal.Open(hdf_file)
+    meta = ds.GetMetadata()
+    meta_parser = parse_meta(meta)
+    projection = get_projection(meta_parser)
+    geotransform = get_transform(meta_parser, 'ImageData1')
+    affine = geotransform_to_affine(geotransform)
+    width,height = get_width_height(meta_parser,'ImageData1')
+    bbox = affine_to_bbox(affine, width, height)
+    dst_bbox = bbox2bbox(bbox, projection, dst_crs)
+    return dst_bbox
+
+def transfer_data_to_odps_list(input_file,bbox,global_grid,bands=None):
+    tile_index_list = global_grid.get_tile_list(bbox)
+    result_list = []
+    for tile_index in tile_index_list:
+        result = process_tile(tile_index,input_file,global_grid,bands=bands)
+        if not result == {}:
+            result_list.append(result)
+    return result_list
 
 
     

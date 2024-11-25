@@ -18,12 +18,16 @@ def writeGeoTiff(output_file,data,geotransform,crs=CRS.from_epsg(3857),dtype=ras
     with rasterio.open(output_file, "w", **out_meta) as dest:
         dest.write(data)
 
-def plot_aster(aster,select_bands=[0,1,2],scale=True,max_value=None):
-    img = aster[select_bands].transpose(1,2,0)
+def plot_aster(aster,select_bands=[0,1,2],scale=True,max_value=None, band_first_flag=True):
+    if band_first_flag:
+        img = aster[select_bands].transpose(1,2,0)
+    else:
+        img = aster[:,:,select_bands]
     if scale:
         if max_value is None:
             max_value = np.max(img)
         img = np.uint8(img/max_value*255)
+        print(max_value)
     f = plt.imshow(img)
     plt.show()
     return f

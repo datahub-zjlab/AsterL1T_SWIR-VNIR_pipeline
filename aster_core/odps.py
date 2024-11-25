@@ -1,5 +1,33 @@
 import numpy as np
 import re
+import os
+from odps import ODPS
+from odps.models import TableSchema, Column, Partition
+
+# Set environment variables for ODPS authentication
+os.environ['ALIBABA_CLOUD_ACCESS_KEY_ID'] = "7uahd8ez0KWmUne3"
+os.environ['ALIBABA_CLOUD_ACCESS_KEY_SECRET'] = "ov2VpjzXH45pzVK5pRM50sI2M0dHVh"
+
+# ODPS project and endpoint configuration
+odps_project = "hpj000082"
+odps_endpoint = 'http://service.cn-hangzhou-zjy-d01.odps.ops.cloud.zhejianglab.com/api'
+
+# Initialize ODPS client
+o = ODPS(
+    os.getenv('ALIBABA_CLOUD_ACCESS_KEY_ID'),
+    os.getenv('ALIBABA_CLOUD_ACCESS_KEY_SECRET'),
+    project=odps_project,
+    endpoint=odps_endpoint
+)
+
+def creat_table(table_name,columns):
+    schema = TableSchema(columns=columns)
+    o.create_table(table_name, schema, if_not_exists=True)
+    print(f"表 {table_name} 已成功创建")
+
+def get_table(table_name):
+    table = o.get_table(table_name)
+    return table
 
 def restore_matrix_from_result(result, bands):
     """
@@ -23,7 +51,8 @@ def restore_matrix_from_result(result, bands):
     # 从result中获取压缩后的数据
     compressed_data = []
     for band in bands:
-        hex_string = result[band].decode('utf-8')
+        # hex_string = result[band].decode('utf-8')
+        hex_string = result[band]
         byte_data = bytes.fromhex(hex_string)
         band_data = np.frombuffer(byte_data, dtype=np.uint8)
         compressed_data.append(band_data)
@@ -34,6 +63,8 @@ def restore_matrix_from_result(result, bands):
     
     # 将压缩后的数据填充回原始矩阵中
     restored_matrix[:, min_row:max_row+1, min_col:max_col+1] = compressed_data
+
+    restored_matrix = np.squeeze(restored_matrix)
     
     return restored_matrix
 
@@ -97,3 +128,14 @@ def transfer_matrix_to_odps_table_column(data,bands,zip_flag=False):
         for i, band in enumerate(bands):
             result[band] = matrix_to_byte(data[i])
     return result
+
+def upload_data_to_odps(result_list, table, key_list=None):
+    # Open a writer to write data to the table
+    if key_list is None:
+        key_list = result_list[0].keys()
+    with table.open_writer(blocks=None) as writer:
+        record_list = []
+        for data in result_list:
+            record = [data[key] for key in key_list]
+            record_list.append(record)
+        writer.write(record_list)

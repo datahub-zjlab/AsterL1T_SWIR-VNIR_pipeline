@@ -17,7 +17,6 @@ def read_data(data_path):
     ds = gdal.Open(data_path)
     return ds
 
-
 def extract_data_from_geotifs(tile_bbox, tile_size,tile_crs,
                              granule_file_list,
                              padding=0, redundant=100, 

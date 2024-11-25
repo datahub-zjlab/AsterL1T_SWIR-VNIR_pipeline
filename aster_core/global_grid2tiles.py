@@ -128,10 +128,10 @@ class BaseTileGenerator:
         bands, raster_width, raster_height = matrix.shape
         window_width, window_height = target_shape
         zoom_factors = (1, window_width / raster_width, window_height / raster_height)
-        resampled_matrix = zoom(matrix, zoom_factors, order=2)
+        resampled_matrix = zoom(matrix, zoom_factors, order=0)
         return resampled_matrix
 
-    def generate_tiles(self):
+    def generate_tiles(self,return_part_data=False):
         """
         Generate tiles for the given data.
 
@@ -158,20 +158,34 @@ class BaseTileGenerator:
                     target_data = np.zeros((sub_data.shape[0], self.tile_size, self.tile_size))
                     target_mask = np.zeros((self.tile_size, self.tile_size), dtype=bool)
 
-                    target_data[:, window_y:window_y + window_height, window_x:window_x + window_width] = self.resample_matrix(sub_data, (window_height, window_width))
+                    part_data = self.resample_matrix(sub_data, (window_height, window_width))
+                    target_data[:, window_y:window_y + window_height, window_x:window_x + window_width] = part_data
                     target_mask[window_y:window_y + window_height, window_x:window_x + window_width] = True
 
                     image_array = np.transpose(target_data, (1, 2, 0))
                     alpha_channel = target_mask.astype(np.uint8) * 255
                     rgba_array = np.dstack((image_array, alpha_channel))
 
-                    tile_list.append({
-                        'data': rgba_array,
-                        'current_index': f'{zoom_level}/{tile_x}/{final_tile_y}',
-                        'current_level': zoom_level,
-                        'min_index': f'{self.min_zoom}/{tile_x // (2**delta_z)}/{final_tile_y // (2**delta_z)}',
-                        'min_level': self.min_zoom
-                    })
+                    if return_part_data:
+                        tile_list.append({
+                            'data': part_data,
+                            'current_index': f'{zoom_level}/{tile_x}/{final_tile_y}',
+                            'current_level': zoom_level,
+                            'min_index': f'{self.min_zoom}/{tile_x // (2**delta_z)}/{final_tile_y // (2**delta_z)}',
+                            'min_level': self.min_zoom,
+                            'window_y':window_y,
+                            'window_x':window_x,
+                            'window_height':window_height,
+                            'window_width':window_width
+                        })
+                    else:
+                        tile_list.append({
+                            'data': rgba_array,
+                            'current_index': f'{zoom_level}/{tile_x}/{final_tile_y}',
+                            'current_level': zoom_level,
+                            'min_index': f'{self.min_zoom}/{tile_x // (2**delta_z)}/{final_tile_y // (2**delta_z)}',
+                            'min_level': self.min_zoom
+                        })
                 except:
                     continue
         
@@ -191,16 +205,16 @@ class OverviewTileGenerator:
         self.all_tile_dict = {}
         self.tile_size = tile_size
 
-    def get_next_index_list(self, current_index_list):
-        """
-        Get the next level tile indices from the current level indices.
+    # def get_next_index_list(self, current_index_list):
+    #     """
+    #     Get the next level tile indices from the current level indices.
 
-        :param current_index_list: List of current level tile indices.
-        :return: List of next level tile indices.
-        """
-        next_index_list = [self.get_next_index(current_index) for current_index in current_index_list]
-        next_index_list = list(set(next_index_list))
-        return next_index_list
+    #     :param current_index_list: List of current level tile indices.
+    #     :return: List of next level tile indices.
+    #     """
+    #     next_index_list = [self.get_next_index(current_index) for current_index in current_index_list]
+    #     next_index_list = list(set(next_index_list))
+    #     return next_index_list
 
     def parse_index(self, current_index):
         """
@@ -236,9 +250,9 @@ class OverviewTileGenerator:
         :param target_shape: Target shape (width, height).
         :return: Resampled matrix.
         """
-        raster_width, raster_height, bands = matrix.shape
+        bands, raster_width, raster_height= matrix.shape
         window_width, window_height = target_shape
-        zoom_factors = (window_width / raster_width, window_height / raster_height, 1)
+        zoom_factors = (1, window_width / raster_width, window_height / raster_height)
         resampled_matrix = zoom(matrix, zoom_factors, order=0)
         return resampled_matrix
 
@@ -251,15 +265,16 @@ class OverviewTileGenerator:
         next_tile = []
         current_tile_list = self.current_tile_list
         current_index = current_tile_list[0]['current_index']
+        band_size = current_tile_list[0]['data'].shape[0]
         next_index = self.get_next_index(current_index)
         current_tile_list = [tile for tile in current_tile_list if tile['min_index']==next_index]
 
         zoom_level, tile_x, tile_y = self.parse_index(next_index)
-        merge_data = np.zeros((2 * self.tile_size, 2 * self.tile_size, 4))
+        merge_data = np.zeros((band_size,2 * self.tile_size, 2 * self.tile_size))
         for tile in current_tile_list:
             current_index = tile['current_index']
             _,x,y = self.parse_index(current_index)
-            merge_data[(y - 2 * tile_y) * self.tile_size:((y - 2 * tile_y) * self.tile_size + self.tile_size),
+            merge_data[:,(y - 2 * tile_y) * self.tile_size:((y - 2 * tile_y) * self.tile_size + self.tile_size),
                     (x - 2 * tile_x) * self.tile_size:((x - 2 * tile_x) * self.tile_size + self.tile_size)] = tile['data']
         next_data = self.resample_matrix(merge_data, (self.tile_size, self.tile_size))
         next_tile = {

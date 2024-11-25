@@ -24,6 +24,7 @@ class GlobalRasterGrid:
         # Pixel scale in x and y directions, usually x_res is postive and y_res is negative
         self.res_x = resolution
         self.res_y = -resolution
+        self.resolution = resolution
         
         # Tile size of raster
         self.tile_size = tile_size

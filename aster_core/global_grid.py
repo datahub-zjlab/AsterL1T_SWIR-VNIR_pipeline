@@ -9,7 +9,7 @@ class GlobalRasterGrid:
     '''
     The raster has the following characteristics:
     1. It has a specified resolution.
-    2. It is based on a specified geographic reference coordinate system (currently using EPSG:3857).
+    2. It is based on a specified geographic(projection) reference coordinate system (currently using EPSG:3857).
     3. It has a specified bounding box.
     4. A tile class is defined based on the specified tile size.
     5. The tile class can return the bounding box of a tile based on the tile index.
@@ -24,6 +24,7 @@ class GlobalRasterGrid:
         # Pixel scale in x and y directions, usually x_res is postive and y_res is negative
         self.res_x = resolution
         self.res_y = -resolution
+        self.resolution = resolution
         
         # Tile size of raster
         self.tile_size = tile_size
