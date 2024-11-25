@@ -1,33 +1,5 @@
 import numpy as np
 import re
-import os
-from odps import ODPS
-from odps.models import TableSchema, Column, Partition
-
-# Set environment variables for ODPS authentication
-os.environ['ALIBABA_CLOUD_ACCESS_KEY_ID'] = "7uahd8ez0KWmUne3"
-os.environ['ALIBABA_CLOUD_ACCESS_KEY_SECRET'] = "ov2VpjzXH45pzVK5pRM50sI2M0dHVh"
-
-# ODPS project and endpoint configuration
-odps_project = "hpj000082"
-odps_endpoint = 'http://service.cn-hangzhou-zjy-d01.odps.ops.cloud.zhejianglab.com/api'
-
-# Initialize ODPS client
-o = ODPS(
-    os.getenv('ALIBABA_CLOUD_ACCESS_KEY_ID'),
-    os.getenv('ALIBABA_CLOUD_ACCESS_KEY_SECRET'),
-    project=odps_project,
-    endpoint=odps_endpoint
-)
-
-def creat_table(table_name,columns):
-    schema = TableSchema(columns=columns)
-    o.create_table(table_name, schema, if_not_exists=True)
-    print(f"表 {table_name} 已成功创建")
-
-def get_table(table_name):
-    table = o.get_table(table_name)
-    return table
 
 def restore_matrix_from_result(result, bands):
     """
