@@ -1,7 +1,7 @@
 import oss2
 from oss2.exceptions import NoSuchKey
 import os
-from aster_core.token_config import accessKeyId, accessKeySecret
+from tests.token_config import accessKeyId, accessKeySecret
 
 def get_bucket(bucket_name):
     auth = oss2.Auth(accessKeyId, accessKeySecret)

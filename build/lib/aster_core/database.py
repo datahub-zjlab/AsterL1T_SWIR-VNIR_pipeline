@@ -1,6 +1,6 @@
 import psycopg2
 from shapely.wkt import dumps, loads
-from aster_core.token_config import params
+from tests.token_config import params
 
 # Function to retrieve files based on spatial, temporal, and cloud cover criteria
 def retrieve_files(region, time_start='2000-01-01', time_end='2008-01-01', cloud_cover=101, download_flag=True):
