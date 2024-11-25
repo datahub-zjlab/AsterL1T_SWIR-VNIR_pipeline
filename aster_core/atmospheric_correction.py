@@ -3,7 +3,6 @@ import numpy as np
 import pandas as pd
 from datetime import datetime
 import json
-import sqlite3
 import os
 import re
 
@@ -14,6 +13,10 @@ from aster_core.hdf_utils import parse_meta
 
 script_path = os.path.abspath(__file__)
 script_dir = os.path.dirname(script_path)
+
+solarz_list = [0, 2, 4, 6] + list(range(7, 42, 8)) + list(range(43, 60, 4)) + list(range(61, 70, 2)) + list(range(71, 81, 1))
+aod_list = [2, 4, 6, 10, 20, 40, 70, 100, 150] + list(range(201, 801, 100)) + list(range(801, 2002, 400))
+dem_list = [0, 200, 1000, 2000, 4000, 8000]
 
 def py6s_coeffients(soz,soa,month,day,atmos_profile,band_id, dem_value, aod_value):
     from Py6S import SixS,Geometry,AeroProfile,GroundReflectance,Altitudes,Wavelength,PredefinedWavelengths,AtmosCorr
@@ -64,8 +67,6 @@ def py6s_coeffients(soz,soa,month,day,atmos_profile,band_id, dem_value, aod_valu
 
 def find_nearest_neighbors(value_list, value):
 
-    solarz_list = [0, 2, 4, 6] + list(range(7, 42, 8)) + list(range(43, 60, 4)) + list(range(61, 70, 2)) + list(range(71, 81, 1))
-    
     value_list.sort()  # 确保列表是有序的
     left = None
     right = None
@@ -125,10 +126,6 @@ def retrieve_atmospheric_correction_paras(solar_z, solar_a, atmos_profile, aod, 
     with open(os.path.join(script_dir,'resource','Aster_6s_date_coeff.json'), 'r') as file:
         aster_6s_date_coeff = json.load(file)
 
-    solarz_list = [0, 2, 4, 6] + list(range(7, 42, 8)) + list(range(43, 60, 4)) + list(range(61, 70, 2)) + list(range(71, 81, 1))
-    aod_list = [2, 4, 6, 10, 20, 40, 70, 100, 150] + list(range(201, 801, 100)) + list(range(801, 2002, 400))
-    dem_list = [0, 200, 1000, 2000, 4000, 8000]
-
     if aod < 5:
         aod = 5
      
@@ -156,6 +153,7 @@ def retrieve_atmospheric_correction_paras(solar_z, solar_a, atmos_profile, aod, 
     return rough_a, rough_b, rough_c
 
 def retrieve_6sparaslut(solar_z_left, solar_z_right, atmos_profile, aod_left, aod_right, dem_left, dem_right, band_id, date_flag='upper'):
+    import sqlite3
     dbfile = os.path.join(script_dir,'resource','Aster_6s_lut_table.db')
     conn = sqlite3.connect(dbfile)
 
