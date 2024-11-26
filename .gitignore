@@ -3,3 +3,5 @@ aster_core.egg-info/
 aster_core/token_config.py
 build/*
 dist/*
+aster_core/oss.py
+aster_core/database.py
