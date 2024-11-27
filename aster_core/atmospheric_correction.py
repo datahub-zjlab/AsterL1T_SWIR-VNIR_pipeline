@@ -176,7 +176,12 @@ def retrieve_atmospheric_correction_parameters(solar_z, solar_a, atmos_profile, 
     Returns:
     - Interpolated coefficients a, b, c
     """
-    with open(os.path.join(script_dir, 'resource', 'Aster_6s_date_coeff.json'), 'r') as file:
+    file_path = os.path.join(script_dir, 'resource', 'Aster_6s_date_coeff.json')
+
+    if not os.path.exists(file_path):
+        raise FileNotFoundError(f"File: '{file_path}' does not exist. Please add the corresponding file to the specified directory.")
+    
+    with open(file_path, 'r') as file:
         aster_6s_date_coeff = json.load(file)
 
     if aod < 5:
@@ -220,7 +225,12 @@ def retrieve_6sparaslut(solar_z_left, solar_z_right, atmos_profile, aod_left, ao
     - List of dictionaries containing the retrieved parameters
     """
     import sqlite3
+
     dbfile = os.path.join(script_dir, 'resource', 'Aster_6s_lut_table.db')
+    
+    if not os.path.exists(dbfile):
+        raise FileNotFoundError(f"File '{dbfile}' does not exist. Please add the corresponding file to the specified directory.")
+
     conn = sqlite3.connect(dbfile)
 
     if date_flag == 'upper':
@@ -282,8 +292,10 @@ def get_aod_from_tile_bbox(hdf_list, tile_bbox, tile_crs, tile_size=64, nodata=-
             if not tile_aod is None:
                 tile_aod = np.float32(tile_aod)
                 tile_aod[tile_aod == nodata] = np.NaN
+                tile_aod[:,np.isnan(tile_aod).all(axis=0)]=nodata
                 if len(tile_aod.shape) == 3:
                     tile_aod = np.nanmean(tile_aod, axis=0)
+                    tile_aod[tile_aod == nodata] = np.NaN
                 tile_aod_list.append(tile_aod)
         except:
             continue
