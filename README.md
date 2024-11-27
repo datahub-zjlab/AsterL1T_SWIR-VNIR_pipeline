@@ -14,9 +14,6 @@ This project is to process Aster L1t VNIR and SWIR dataset.
    
 `pip install -e path/to/your/package`
 
-4. Using pre-defined pipeline
-
-`from aster_core.pipeline import TilePipeline`
 
 ### **Method**
 1. `aster_core.GlobalGrid`
