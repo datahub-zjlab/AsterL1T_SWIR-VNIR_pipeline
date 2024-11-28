@@ -1,5 +1,4 @@
 import numpy as np
-import cv2
 import scipy.ndimage as ndimage
 from scipy.signal import butter, filtfilt
 

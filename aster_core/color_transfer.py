@@ -1,6 +1,5 @@
 import numpy as np
 import scipy as sp
-import numpy as np
 import itertools
 
 eps = np.finfo(float).eps
