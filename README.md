@@ -6,14 +6,51 @@ This project is to process Aster L1t VNIR and SWIR dataset.
 
 ### **Get Started**
 
-1. Prepare enviroments  
+Follow these steps to install the project:
 
-`pip install -r requirements.txt`
+1. Create a Conda Environment
 
-2. Install packages
+First, create a new Conda environment with Python 3.10:
+
+```bash
+conda create -n myenv python=3.10
+```
+
+Activate the environment:
+
+```bash
+conda activate myenv
+```
+
+2. Install Required Packages
+
+Install gdal version greater than 3.6 and py6s using Conda:
    
-`pip install -e path/to/your/package`
+```bash
+conda install gdal>3.6 py6s
+```
 
+3. Install the aster_core Package
+
+Download the provided aster_core-0.0.2-py3-none-any.whl wheel package from the repository. Then, install it using pip
+
+```bash
+pip install path/to/aster_core-0.0.2-py3-none-any.whl
+```
+
+4. Add Resource Files
+
+Download the files from the aster_core/resource directory in the repository. Place these files in the corresponding directory where the aster_core package is installed.
+
+5. Test
+
+To ensure that the installation was successful, open a Python interpreter and try importing the aster_core module:
+
+```python
+import aster_core
+```
+
+If no errors occur, the installation is complete.
 
 ### **Method**
 1. `aster_core.GlobalGrid`
