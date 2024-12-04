@@ -38,6 +38,13 @@ Download the provided aster_core-0.0.2-py3-none-any.whl wheel package from the r
 pip install path/to/aster_core-0.0.2-py3-none-any.whl
 ```
 
+OR
+
+```bash
+git clone https://github.com/datahub-zjlab/AsterL1T_SWIR-VNIR_pipeline.git
+pip install path/to/AsterL1T_SWIR-VNIR_pipeline
+```
+
 4. Add Resource Files
 
 Download the files from the aster_core/resource directory in the repository. Place these files in the corresponding directory where the aster_core package is installed.
