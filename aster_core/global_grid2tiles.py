@@ -319,35 +319,43 @@ def parse_index(current_index):
     tile_y = int(parts[2])
     return zoom_level, tile_x, tile_y
 
-class MergeTileRecords():
+def MergeTileRecords(tile_list, nodata_value=0):
 
-    def __init__(self, tile_list, nodata_value=0):
+    data_matrix_list = []
+    alpha_list = []
+    for tile in tile_list:
+        _data_matrix = tile['data'][:, :, :-1]  
+        _alpha = tile['data'][:, :, -1]        
+        data_matrix_list.append(_data_matrix)
+        alpha_list.append(_alpha)
 
-        self.tile_list = tile_list
-        
-    def merge(self):
-        data_list = [tile['data'] for tile in self.tile_list]
-        data = np.sum(data_list,axis=0)
-        current_index = self.tile_list[0]['current_index']
-        zoom_level = self.tile_list[0]['current_level']
-        if 'min_index' in self.tile_list[0].keys():
-            min_index = self.tile_list[0]['min_index']
-        else:
-            min_index = None
-        if 'min_level' in self.tile_list[0].keys():
-            min_level = self.tile_list[0]['min_level']
-        else:
-            min_level = None
+        # 计算 data_matrix
+    alpha_sum = np.sum(alpha_list, axis=0)
+    alpha_sum[alpha_sum == 0] = 1  # 避免除零错误
+    data_matrix = np.divide(np.sum(data_matrix_list, axis=0), alpha_sum[..., np.newaxis])
+    alpha = np.max(alpha_list, axis=0)
+    data = np.dstack((data_matrix, alpha))
 
-        result = {
-                    'data': data,
-                    'current_index': current_index,
-                    'current_level': zoom_level,
-                    'min_index': min_index,
-                    'min_level': min_level
-                }
-        
-        return result
+    current_index = tile_list[0]['current_index']
+    zoom_level = tile_list[0]['current_level']
+    if 'min_index' in tile_list[0].keys():
+        min_index = tile_list[0]['min_index']
+    else:
+        min_index = None
+    if 'min_level' in tile_list[0].keys():
+        min_level = tile_list[0]['min_level']
+    else:
+        min_level = None
+
+    result = {
+                'data': data,
+                'current_index': current_index,
+                'current_level': zoom_level,
+                'min_index': min_index,
+                'min_level': min_level
+            }
+    
+    return result
 
 def scale_to_uint8(band_data, min_val, max_val):
     """

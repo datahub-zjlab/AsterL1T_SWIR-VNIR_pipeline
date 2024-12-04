@@ -100,11 +100,11 @@ def extract_data_from_hdfs(tile_bbox, tile_size, tile_crs, bands,
             return ref_list, meta_list, granule_id_list
         else:
             return ref_list, meta_list
-    
 
 def extract_granule(hdf_file, bands, tile_bbox=None, tile_size=1024, dst_crs=None,
                     dst_transform=None, src_crs=None, ref_band=None,
-                    padding=0, redundant=100, return_dst_transform_flag=False):
+                    padding=0, redundant=100, src_nodata=0, dst_nodate=0,
+                    return_dst_transform_flag=False, return_dst_crs_flag=False):
     """
     Extract and reproject data from an HDF file based on the given parameters.
 
@@ -114,15 +114,18 @@ def extract_granule(hdf_file, bands, tile_bbox=None, tile_size=1024, dst_crs=Non
         tile_bbox (Boundingbox): Bounding box of the tile in EPSG:3857.
         tile_size (int): Size of the tile in pixels (tile_size x tile_size).
         dst_transform (affine.Affine, optional): Destination transform for the tile.
-        src_crs (rasterio.crs.CRS, optional): Destination projection.
+        src_crs (rasterio.crs.CRS, optional): Source projection.
+        ref_band (str, optional): Reference band to use for metadata extraction. Default is the last band in the list.
         padding (int, optional): Padding around the tile. Default is 0.
         redundant (int, optional): Redundant pixels to include. Default is 100.
         return_dst_transform_flag (bool, optional): Whether to return the destination transform. Default is False.
+        return_dst_crs_flag (bool, optional): Whether to return the destination CRS. Default is False.
 
     Returns:
         np.ndarray: Processed and reprojected matrix of the granule.
         dict: Granule meta.
         affine.Affine: Destination transform if return_dst_transform_flag is True.
+        rasterio.crs.CRS: Destination CRS if return_dst_crs_flag is True.
     """
     try:
         hdf_ds = read_data(hdf_file)
@@ -154,7 +157,7 @@ def extract_granule(hdf_file, bands, tile_bbox=None, tile_size=1024, dst_crs=Non
                 # width,height = get_width_height(meta_parser,ref_band)
             
             dst_transform = geotransform
-            tile_bbox = geotransform_to_bbox(dst_transform,width,height)
+            tile_bbox = geotransform_to_bbox(dst_transform, width, height)
             dst_crs = projection
 
         else:
@@ -170,7 +173,7 @@ def extract_granule(hdf_file, bands, tile_bbox=None, tile_size=1024, dst_crs=Non
                 sds_path = sds_info[0]
                 match = re.search(band_desc, sds_path)
                 if match:
-                    dst_matrix = extract_subdataset(sds_path, tile_bbox, dst_crs, dst_transform, padding=padding, redundant=redundant)
+                    dst_matrix = extract_subdataset(sds_path, tile_bbox, dst_crs, dst_transform, padding=padding, redundant=redundant, src_nodata=src_nodata, dst_nodate=dst_nodate)
                     if dst_matrix is not None:
                         sds_data[match.group(0)] = dst_matrix
 
@@ -186,14 +189,22 @@ def extract_granule(hdf_file, bands, tile_bbox=None, tile_size=1024, dst_crs=Non
             # print(f'Miss bands found in {hdf_file}')
             merged_matrix = None
 
-        if return_dst_transform_flag:
+        if return_dst_transform_flag and return_dst_crs_flag:
+            return merged_matrix, meta, dst_transform, dst_crs
+        elif return_dst_transform_flag:
             return merged_matrix, meta, dst_transform
+        elif return_dst_crs_flag:
+            return merged_matrix, meta, dst_crs
         else:
             return merged_matrix, meta
     except:
         merged_matrix = None
-        if return_dst_transform_flag:
+        if return_dst_transform_flag and return_dst_crs_flag:
+            return merged_matrix, meta, dst_transform, dst_crs
+        elif return_dst_transform_flag:
             return merged_matrix, meta, dst_transform
+        elif return_dst_crs_flag:
+            return merged_matrix, meta, dst_crs
         else:
             return merged_matrix, meta
         
@@ -276,7 +287,7 @@ def extract_geotif(geotif_file, tile_bbox=None, tile_size=1024,
 
         return dst_matrix
 
-def extract_subdataset(sds_path, tile_bbox, dst_crs, dst_transform, padding=0, redundant=100):
+def extract_subdataset(sds_path, tile_bbox, dst_crs, dst_transform, padding=0, redundant=100, src_nodata=0, dst_nodate=0):
     """
     Extract a subdataset from an HDF file to extract and reproject the data based on the given parameters.
 
@@ -345,6 +356,8 @@ def extract_subdataset(sds_path, tile_bbox, dst_crs, dst_transform, padding=0, r
         dst_matrix, dst_transform = reproject(
             source=sub_array,
             destination=dst_matrix,
+            src_nodata=src_nodata,
+            dst_nodata=dst_nodate,
             src_transform=geotransform_to_affine(sub_geotransform),
             src_crs=projection,
             dst_transform=dst_transform,

@@ -23,7 +23,10 @@ def restore_matrix_from_result(result, bands):
     # 从result中获取压缩后的数据
     compressed_data = []
     for band in bands:
-        hex_string = result[band].decode('utf-8')
+        if type(result[band]) is str:
+            hex_string = result[band]
+        else:
+            hex_string = result[band].decode('utf-8')
         # hex_string = result[band]
         byte_data = bytes.fromhex(hex_string)
         band_data = np.frombuffer(byte_data, dtype=np.uint8)
