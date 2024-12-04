@@ -128,6 +128,8 @@ def extract_granule(hdf_file, bands, tile_bbox=None, tile_size=1024, dst_crs=Non
         rasterio.crs.CRS: Destination CRS if return_dst_crs_flag is True.
     """
     try:
+        if not os.path.exists(hdf_file):
+            raise FileNotFoundError(f'No {hdf_file} found!')
         hdf_ds = read_data(hdf_file)
         meta = hdf_ds.GetMetadata()
         sds = hdf_ds.GetSubDatasets()

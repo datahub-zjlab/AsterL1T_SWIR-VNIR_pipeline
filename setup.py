@@ -6,7 +6,7 @@ setup(
     packages=find_packages(),
     install_requires=[
         'matplotlib==3.9.2',
-        'numpy==2.1.2',
+        'numpy==1.26.4',
         'opencv_python==4.10.0.84',
         'pandas==2.2.3',
         'Pillow==11.0.0',

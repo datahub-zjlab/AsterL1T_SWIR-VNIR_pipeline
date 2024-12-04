@@ -329,9 +329,9 @@ def MergeTileRecords(tile_list, nodata_value=0):
         data_matrix_list.append(_data_matrix)
         alpha_list.append(_alpha)
 
-        # 计算 data_matrix
+    
     alpha_sum = np.sum(alpha_list, axis=0)
-    alpha_sum[alpha_sum == 0] = 1  # 避免除零错误
+    alpha_sum[alpha_sum == 0] = 1  
     data_matrix = np.divide(np.sum(data_matrix_list, axis=0), alpha_sum[..., np.newaxis])
     alpha = np.max(alpha_list, axis=0)
     data = np.dstack((data_matrix, alpha))
