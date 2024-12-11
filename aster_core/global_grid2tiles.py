@@ -163,7 +163,7 @@ class BaseTileGenerator:
                     target_mask[window_y:window_y + window_height, window_x:window_x + window_width] = True
 
                     image_array = np.transpose(target_data, (1, 2, 0))
-                    alpha_channel = target_mask.astype(np.uint8) * 255
+                    alpha_channel = target_mask.astype(np.uint8) 
                     rgba_array = np.dstack((image_array, alpha_channel))
 
                     if return_part_data:
@@ -250,9 +250,9 @@ class OverviewTileGenerator:
         :param target_shape: Target shape (width, height).
         :return: Resampled matrix.
         """
-        bands, raster_width, raster_height= matrix.shape
+        raster_width, raster_height, bands= matrix.shape
         window_width, window_height = target_shape
-        zoom_factors = (1, window_width / raster_width, window_height / raster_height)
+        zoom_factors = (window_width / raster_width, window_height / raster_height, 1)
         resampled_matrix = zoom(matrix, zoom_factors, order=0)
         return resampled_matrix
 
@@ -265,17 +265,17 @@ class OverviewTileGenerator:
         next_tile = []
         current_tile_list = self.current_tile_list
         current_index = current_tile_list[0]['current_index']
-        band_size = current_tile_list[0]['data'].shape[0]
+        band_size = current_tile_list[0]['data'].shape[-1]
         next_index = self.get_next_index(current_index)
         current_tile_list = [tile for tile in current_tile_list if tile['min_index']==next_index]
 
         zoom_level, tile_x, tile_y = self.parse_index(next_index)
-        merge_data = np.zeros((band_size,2 * self.tile_size, 2 * self.tile_size))
+        merge_data = np.zeros((2 * self.tile_size, 2 * self.tile_size, band_size))
         for tile in current_tile_list:
             current_index = tile['current_index']
             _,x,y = self.parse_index(current_index)
-            merge_data[:,(y - 2 * tile_y) * self.tile_size:((y - 2 * tile_y) * self.tile_size + self.tile_size),
-                    (x - 2 * tile_x) * self.tile_size:((x - 2 * tile_x) * self.tile_size + self.tile_size)] = tile['data']
+            merge_data[(y - 2 * tile_y) * self.tile_size:((y - 2 * tile_y) * self.tile_size + self.tile_size),
+                    (x - 2 * tile_x) * self.tile_size:((x - 2 * tile_x) * self.tile_size + self.tile_size), :] = tile['data']
         next_data = self.resample_matrix(merge_data, (self.tile_size, self.tile_size))
         next_tile = {
             'data': next_data,

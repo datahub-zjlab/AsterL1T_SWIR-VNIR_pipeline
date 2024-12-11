@@ -1,6 +1,10 @@
 import numpy as np
 # from aster_core.cloud import get_cloud_masks,add_to_chanel,split_from_chanel
-import copy
+from skimage import filters
+from aster_core.color_transfer import colorFunction
+from aster_core.cloud import cal_cloud_mask,cal_spectral_info
+from skimage.metrics import structural_similarity as ssim
+
 
 def merge_min(ref_list, ref_c=0):
     """
@@ -123,6 +127,121 @@ def merge_deshadow(ref_list, ref_c=0, threshold=0.2):
     merge_data[np.isnan(merge_data)]=0
     
     return merge_data
+
+'''
+MERGE_CUSTOM
+'''
+
+class AST_TILE():
+    def __init__(self, reflectance, cloud_cover, aod, solar_z, solar_a, atmos_profile, nodata_value=0, toa=None):
+        
+        self.reflectance = reflectance
+        self.cloud_cover = cloud_cover
+        self.aod = aod
+        self.solar_z = solar_z
+        self.solar_a = solar_a
+        self.atmos_profile = atmos_profile
+
+        self.nodata_value = nodata_value
+        self.coverage = self.cal_coverage()
+    
+    def cal_coverage(self,band_id=0):
+        coverage = calculate_coverage(self.reflectance,band_id=band_id,nodata_value=self.nodata_value)
+        return coverage
+    
+    # def cal_fg(self):
+    #     self.fg = common_used_functional_group(self.reflectance)
+
+    def cal_mask(self,img):
+        mask = img != self.nodata_value
+        return mask
+
+    def cal_cloud_score(self,no_cloud_reflectance):
+
+        mask_0 = self.cal_mask(self.reflectance[0])
+        mask_1 = self.cal_mask(no_cloud_reflectance[0])
+
+        overlap_area = np.logical_and(mask_0,mask_1)
+
+        spectral_0 = cal_spectral_info(no_cloud_reflectance,mask=overlap_area,percent=(70,100))
+        spectral_1 = cal_spectral_info(self.reflectance,mask=overlap_area,percent=(70,100))
+        
+        cloud_score_0 = np.corrcoef(spectral_0,spectral_1)[0,1]
+        
+        cloud_score_1 = ssim(no_cloud_reflectance[0],self.reflectance[0],data_range=1)/(np.sum(overlap_area)/np.sum(mask_1))
+  
+
+        self.cloud_score = cloud_score_0*0.5+cloud_score_1*0.5
+
+        return self.cloud_score
+
+def calculate_coverage(image,band_id=0,nodata_value=0):
+    """
+    Calculate the effective pixel coverage of the image based on band 1.
+    :param image: Atmospherically corrected image, shape (9, 1024, 1024)
+    :return: Coverage percentage, range 0 to 100
+    """
+    band1 = image[band_id, :, :]  # Get band 1
+    valid_pixels = np.sum(band1 != nodata_value)  # Assume 0 is invalid pixel
+    total_pixels = 1024 * 1024
+    coverage = (valid_pixels / total_pixels) * 100
+    return coverage
+
+def is_overlap_nodate(img1,img2,nodata_value = 0):
+    img1_band1 = img1[0]
+    img2_band1 = img2[0]
+    img1_band1_missing_mask = img1_band1 == nodata_value
+    img2_band1_valid_mask = img2_band1 != nodata_value
+    if np.any(img1_band1_missing_mask*img2_band1_valid_mask):
+        return True
+    else:
+        return False
+
+def correct_and_fill_images(img1, img2,nodata_value=0):
+    """
+    Correct img2 based on the overlap with img1, then fill the missing regions of img1 with data from img2.
+    :param img1: First candidate image
+    :param img2: Second candidate image
+    :return: Filled first candidate image
+    """
+    # Implement correction and filling logic
+    corrected_img2 = colorFunction(img1,img2)  # Placeholder, return original image
+    filled_img1 = img1  # Placeholder, return original image
+    filled_img1[:,filled_img1[0]==nodata_value] = corrected_img2[:,filled_img1[0]==nodata_value]
+    return filled_img1
+
+def merge_custom(ref_list, min_num=1000):
+    no_cloud_min_aster = merge_min(ref_list)
+    thresh_otsu = filters.threshold_otsu(no_cloud_min_aster[0],nbins=100)
+    invalid_mask = no_cloud_min_aster[0]>thresh_otsu
+
+    cf_img_list = []
+
+    for img in ref_list:
+        try:
+            img[img<0]=0
+
+            rough_cloud_mask = cal_cloud_mask(img,lower_percent=99.99)
+            cf_mask = invalid_mask & (img[0]>0) & ~rough_cloud_mask
+
+            if np.sum(cf_mask)<min_num:
+                continue
+                cf_mask = invalid_mask & (img[0]>0)
+
+            cf_img = colorFunction(no_cloud_min_aster,img,mask=cf_mask)
+            cf_img[:,rough_cloud_mask] = img[:,rough_cloud_mask]
+
+            accurate_cloud_mask = rough_cloud_mask
+
+            cf_img[:,accurate_cloud_mask] = np.nan
+            cf_img[:,cf_img[0]==0] = np.nan
+            cf_img_list.append(cf_img)
+        except:
+            continue
+    cf_img_list.append(no_cloud_min_aster)
+    first_reference_aster = np.nanmedian(cf_img_list,axis=0)
+
+    return first_reference_aster
 
 
 

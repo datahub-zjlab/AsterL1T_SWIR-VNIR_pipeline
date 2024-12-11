@@ -299,3 +299,77 @@ def color_transfer_block_dealingseam(merged_matrix,reference_matrix,size=256,ove
         current_data_xy[:,:, y_start:y_end] += tmp  
     
     return  current_data_xy[:,overlap//2:-overlap//2,overlap//2:-overlap//2]
+
+def colour_transfer_mkl_params(x0, x1):
+    a = np.cov(x0.T)
+    b = np.cov(x1.T)
+
+    Da2, Ua = np.linalg.eig(a)
+    Da = np.diag(np.sqrt(Da2.clip(eps, None))) 
+
+    C = np.dot(np.dot(np.dot(np.dot(Da, Ua.T), b), Ua), Da)
+
+    Dc2, Uc = np.linalg.eig(C)
+    Dc = np.diag(np.sqrt(Dc2.clip(eps, None))) 
+
+    Da_inv = np.diag(1./(np.diag(Da)))
+
+    t = np.dot(np.dot(np.dot(np.dot(np.dot(np.dot(Ua, Da_inv), Uc), Dc), Uc.T), Da_inv), Ua.T) 
+
+    mx0 = np.mean(x0, axis=0)
+    mx1 = np.mean(x1, axis=0)
+    return t,mx0,mx1
+
+from scipy.stats import rankdata
+
+def cal_rho(orig,target):
+    orig_ranks = rankdata(orig, axis=1)
+    target_ranks = rankdata(target, axis=1)
+
+    d_squared = (orig_ranks - target_ranks) ** 2
+    sum_d_squared = np.sum(d_squared, axis=1)
+    n = orig.shape[1]
+    rho = 1 - (6 * sum_d_squared) / (n * (n**2 - 1))
+    return rho
+
+
+def colorFunction(ref,color,accurate_flag=False,mask=None):
+    color = np.transpose(color, [1, 2, 0])
+    ref = np.transpose(ref, [1, 2, 0])
+
+    myShape = color.shape
+
+    mask_ref0 = (ref==0)
+    mask_color0 = (color==0)
+
+    target = (1 - mask_color0) * ref
+    orig = (1 - mask_ref0)*color
+    
+    if not mask is None:
+        orig = orig[mask]
+        target = target[mask]
+        
+
+    else:
+        overlap_mask = (color[:,:,0]!=0) & (ref[:,:,0]!=0)
+        orig = orig[overlap_mask]
+        target = target[overlap_mask]
+
+    if accurate_flag:
+        rho = cal_rho(orig,target)
+        rho_threashold = min(np.percentile(rho,20),0.9)
+        spectal_space_mask = rho>rho_threashold
+
+        if len(spectal_space_mask)/np.sum(np.ones_like(color[:,:,0]))>30:
+            orig = orig[spectal_space_mask]
+            target = target[spectal_space_mask]
+
+    t,mx0,mx1 = colour_transfer_mkl_params(orig, target)
+
+    im_result = np.dot(color - mx0, t) + mx1
+
+    im_result = im_result.reshape(myShape)
+    im_result = (1 - mask_color0) * im_result
+    im_result = np.transpose(im_result, [2, 0, 1])
+
+    return im_result
