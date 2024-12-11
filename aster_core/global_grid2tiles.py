@@ -28,7 +28,7 @@ class BaseTileGenerator:
         self.xyz_flag = xyz_flag
 
         self.data = data
-        self.raster_count, self.x_size, self.y_size = self.data.shape
+        self.raster_count, self.y_size, self.x_size = self.data.shape
         self.geotransform = geotransform
         self.bbox = bbox
 
