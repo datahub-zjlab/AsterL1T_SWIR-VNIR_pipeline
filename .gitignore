@@ -6,4 +6,3 @@ dist/*
 aster_core/oss.py
 aster_core/database.py
 aster_core/pipeline.py
-aster_core/cloud.py
