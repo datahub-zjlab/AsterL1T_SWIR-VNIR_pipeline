@@ -333,7 +333,7 @@ def cal_rho(orig,target):
     return rho
 
 
-def colorFunction(ref,color,accurate_flag=False,mask=None):
+def colorFunction(ref,color,accurate_flag=False,mask=None,alpha=0,beta=1):
     color = np.transpose(color, [1, 2, 0])
     ref = np.transpose(ref, [1, 2, 0])
 
@@ -365,8 +365,9 @@ def colorFunction(ref,color,accurate_flag=False,mask=None):
             target = target[spectal_space_mask]
 
     t,mx0,mx1 = colour_transfer_mkl_params(orig, target)
-
-    im_result = np.dot(color - mx0, t) + mx1
+ 
+    t_weighted = alpha * t + (1 - alpha) * np.eye(t.shape[0])
+    im_result = np.dot(color - mx0, t_weighted) + beta * mx1 + (1 - beta) * mx0
 
     im_result = im_result.reshape(myShape)
     im_result = (1 - mask_color0) * im_result

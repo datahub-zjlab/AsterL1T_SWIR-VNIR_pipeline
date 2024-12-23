@@ -4,6 +4,8 @@ from skimage import filters
 from aster_core.color_transfer import colorFunction
 from aster_core.cloud import cal_cloud_mask,cal_spectral_info
 from skimage.metrics import structural_similarity as ssim
+from skimage.metrics import mean_squared_error as mse
+
 
 
 def merge_min(ref_list, ref_c=0):
@@ -226,7 +228,6 @@ def merge_custom(ref_list, min_num=1000):
 
             if np.sum(cf_mask)<min_num:
                 continue
-                cf_mask = invalid_mask & (img[0]>0)
 
             cf_img = colorFunction(no_cloud_min_aster,img,mask=cf_mask)
             cf_img[:,rough_cloud_mask] = img[:,rough_cloud_mask]
@@ -235,13 +236,82 @@ def merge_custom(ref_list, min_num=1000):
 
             cf_img[:,accurate_cloud_mask] = np.nan
             cf_img[:,cf_img[0]==0] = np.nan
-            cf_img_list.append(cf_img)
+
+            if not np.any(np.iscomplex(cf_img)):
+                cf_img_list.append(cf_img)
         except:
             continue
+        
+    cf_img_list.append(no_cloud_min_aster)
     cf_img_list.append(no_cloud_min_aster)
     first_reference_aster = np.nanmedian(cf_img_list,axis=0)
 
     return first_reference_aster
 
+def merge_region(ref_list, min_num=1000, alpha=0.5,beta=0.9, mse_threshold=0.5):
+
+    def calculate_coverage(ref):
+        """Calculate the coverage of a single matrix"""
+        sum_ref = np.sum(ref, axis=0)  # Sum across all bands
+        nonzero_count = np.count_nonzero(sum_ref)  # Count the number of non-zero pixels
+        coverage = nonzero_count / (1024 * 1024)  # Calculate the coverage
+        return coverage
+
+    def sort_ref_list_by_coverage(ref_list):
+        """Sort ref_list by coverage in descending order"""
+        # Calculate the coverage for each matrix
+        coverages = [calculate_coverage(ref) for ref in ref_list]
+        
+        # Pair each coverage with its corresponding matrix
+        coverage_ref_pairs = list(zip(coverages, ref_list))
+        
+        # Sort the pairs by coverage in descending order
+        coverage_ref_pairs.sort(reverse=True, key=lambda x: x[0])
+        
+        # Extract the sorted matrices
+        sorted_ref_list = [pair[1] for pair in coverage_ref_pairs]
+        
+        return sorted_ref_list
+    
+    custom_result = merge_custom(ref_list)
+    first_reference_img = np.zeros_like(custom_result)
+    sorted_ref_list = sort_ref_list_by_coverage(ref_list)
+
+    for img in sorted_ref_list:
+        try:
+            img[img<0]=0.0001
+
+            rough_cloud_mask = cal_cloud_mask(img,lower_percent=99.99)
+            cf_mask = (img[0]>0) & ~rough_cloud_mask
+
+            if np.sum(cf_mask)<min_num:
+                continue
+        
+            cf_img = colorFunction(custom_result,img,mask=cf_mask,alpha=alpha,beta=beta)
+            cf_img[:,rough_cloud_mask] = img[:,rough_cloud_mask]
+
+            # cf_max_img = colorFunction(custom_result,img,mask=cf_mask,alpha=1,beta=1)
+            # cf_max_img[:,rough_cloud_mask] = img[:,rough_cloud_mask]
+
+            if not np.any(np.iscomplex(cf_img)):
+
+                empty_region = (np.sum(first_reference_img,axis=0)==0) & (np.sum(cf_img,axis=0)!=0)
+                covered_region = (np.sum(first_reference_img,axis=0)!=0) & (np.sum(cf_img,axis=0)!=0)
+
+                if np.any(empty_region):
+                    
+                    first_reference_img[:,empty_region] = cf_img[:,empty_region]
+
+                if np.any(covered_region):
+
+                    orig_coverd_region_mse = mse(first_reference_img[:,covered_region],custom_result[:,covered_region])
+                    target_coverd_region_mse = mse(cf_img[:,covered_region],custom_result[:,covered_region])
+
+                    if (target_coverd_region_mse<orig_coverd_region_mse) & ((orig_coverd_region_mse-target_coverd_region_mse)/orig_coverd_region_mse>mse_threshold):
+                        first_reference_img[:,covered_region] = cf_img[:,covered_region]
+
+        except:
+            continue
+    return first_reference_img
 
 
