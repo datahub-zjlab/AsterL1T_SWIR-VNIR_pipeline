@@ -1,12 +1,10 @@
 import numpy as np
 # from aster_core.cloud import get_cloud_masks,add_to_chanel,split_from_chanel
 from skimage import filters
-from aster_core.color_transfer import colorFunction
+from aster_core.color_transfer import colorFunction,apply_color_transfer_params
 from aster_core.cloud import cal_cloud_mask,cal_spectral_info
 from skimage.metrics import structural_similarity as ssim
 from skimage.metrics import mean_squared_error as mse
-
-
 
 def merge_min(ref_list, ref_c=0):
     """
@@ -32,14 +30,13 @@ def merge_min(ref_list, ref_c=0):
         ref_list = [arr[np.newaxis, :, :] for arr in ref_list]
         shape = (1,) + shape
 
-    # 将列表中的数组沿第一个维度堆叠
     data = np.stack(ref_list, axis=0)
 
     # 提取第一个通道的数据
-    data_bref = data[:, ref_c, :, :]
+    data_bref = data[:, ref_c, :, :]+data[:, ref_c+1, :, :]*0.001
 
     # 将数据中的0值替换为无穷大，以便在计算最小值时忽略这些值
-    data_bref[data_bref == 0] = np.inf
+    data_bref[np.sum(data,axis=1) == 0] = np.inf
 
     # 计算每个位置的最小值对应的下标
     min_indices = np.argmin(data_bref, axis=0)
@@ -212,7 +209,10 @@ def correct_and_fill_images(img1, img2,nodata_value=0):
     filled_img1[:,filled_img1[0]==nodata_value] = corrected_img2[:,filled_img1[0]==nodata_value]
     return filled_img1
 
-def merge_custom(ref_list, min_num=1000, lower_percent=99.99):
+def merge_custom(ref_list, min_num_percent=1, lower_percent=99.99, return_list=False):
+    _,x,y = ref_list[0].shape
+    min_num = int(x*y*min_num_percent/100)
+
     no_cloud_min_aster = merge_min(ref_list)
     thresh_otsu = filters.threshold_otsu(no_cloud_min_aster[0],nbins=100)
     invalid_mask = no_cloud_min_aster[0]>thresh_otsu
@@ -224,7 +224,7 @@ def merge_custom(ref_list, min_num=1000, lower_percent=99.99):
             img[img<0]=0
 
             rough_cloud_mask = cal_cloud_mask(img,lower_percent=lower_percent)
-            cf_mask = invalid_mask & (img[0]>0) & ~rough_cloud_mask
+            cf_mask = invalid_mask & (np.all(img > 0,axis=0)) & ~rough_cloud_mask
 
             if np.sum(cf_mask)<min_num:
                 continue
@@ -235,7 +235,7 @@ def merge_custom(ref_list, min_num=1000, lower_percent=99.99):
             accurate_cloud_mask = rough_cloud_mask
 
             cf_img[:,accurate_cloud_mask] = np.nan
-            cf_img[:,cf_img[0]==0] = np.nan
+            cf_img[:,np.any(cf_img==0,axis=0)] = np.nan
 
             if not np.any(np.iscomplex(cf_img)):
                 cf_img_list.append(cf_img)
@@ -245,10 +245,12 @@ def merge_custom(ref_list, min_num=1000, lower_percent=99.99):
     cf_img_list.append(no_cloud_min_aster)
     cf_img_list.append(no_cloud_min_aster)
     first_reference_aster = np.nanmedian(cf_img_list,axis=0)
+    if not return_list:
+        return first_reference_aster
+    else:
+        return first_reference_aster, cf_img_list
 
-    return first_reference_aster
-
-def merge_region(ref_list, min_num=1000, alpha=0.5,beta=0.9, mse_threshold=0.5):
+def merge_region(ref_list, min_num_percent=1, alpha=0.5,beta=0.9, mse_threshold=0.5):
 
     def calculate_coverage(ref):
         """Calculate the coverage of a single matrix"""
@@ -273,30 +275,33 @@ def merge_region(ref_list, min_num=1000, alpha=0.5,beta=0.9, mse_threshold=0.5):
         
         return sorted_ref_list
     
+    _,x,y = ref_list[0].shape
+    min_num = int(x*y*min_num_percent/100)
+    
     custom_result = merge_custom(ref_list)
     first_reference_img = np.zeros_like(custom_result)
     sorted_ref_list = sort_ref_list_by_coverage(ref_list)
 
     for img in sorted_ref_list:
         try:
-            img[img<0]=0.0001
+            img[img<0]=0
 
             rough_cloud_mask = cal_cloud_mask(img,lower_percent=99.99)
-            cf_mask = (img[0]>0) & ~rough_cloud_mask
+            cf_mask = (np.all(img > 0,axis=0)) & ~rough_cloud_mask
 
             if np.sum(cf_mask)<min_num:
                 continue
         
             cf_img = colorFunction(custom_result,img,mask=cf_mask,alpha=alpha,beta=beta)
-            cf_img[:,rough_cloud_mask] = img[:,rough_cloud_mask]
+            cf_img[:,rough_cloud_mask] = 0
 
             # cf_max_img = colorFunction(custom_result,img,mask=cf_mask,alpha=1,beta=1)
             # cf_max_img[:,rough_cloud_mask] = img[:,rough_cloud_mask]
 
             if not np.any(np.iscomplex(cf_img)):
 
-                empty_region = (np.sum(first_reference_img,axis=0)==0) & (np.sum(cf_img,axis=0)!=0)
-                covered_region = (np.sum(first_reference_img,axis=0)!=0) & (np.sum(cf_img,axis=0)!=0)
+                empty_region = (np.all(first_reference_img==0,axis=0)) & (np.any(cf_img!=0,axis=0))
+                covered_region = (np.any(first_reference_img!=0,axis=0)) & (np.any(cf_img!=0,axis=0))
 
                 if np.any(empty_region):
                     
@@ -304,8 +309,8 @@ def merge_region(ref_list, min_num=1000, alpha=0.5,beta=0.9, mse_threshold=0.5):
 
                 if np.any(covered_region):
 
-                    orig_coverd_region_mse = mse(first_reference_img[:,covered_region],custom_result[:,covered_region])
-                    target_coverd_region_mse = mse(cf_img[:,covered_region],custom_result[:,covered_region])
+                    orig_coverd_region_mse = wmse(first_reference_img[:,covered_region],custom_result[:,covered_region])
+                    target_coverd_region_mse = wmse(cf_img[:,covered_region],custom_result[:,covered_region])
 
                     if (target_coverd_region_mse<orig_coverd_region_mse) & ((orig_coverd_region_mse-target_coverd_region_mse)/orig_coverd_region_mse>mse_threshold):
                         first_reference_img[:,covered_region] = cf_img[:,covered_region]
@@ -314,8 +319,8 @@ def merge_region(ref_list, min_num=1000, alpha=0.5,beta=0.9, mse_threshold=0.5):
             continue
     return first_reference_img
 
-def merge_region_with_identifier_channel(ref_list, min_num=1000, alpha=0.5, beta=0.9, mse_threshold=0.5):
 
+def merge_region_with_identifier_channel(ref_list, min_num_percent=1, alpha=0.5, beta=0.9, mse_threashold=0.05, mse_percent_threashold=0.5):
     def calculate_coverage(ref):
         """Calculate the coverage of a single matrix"""
         sum_ref = np.sum(ref, axis=0)  # Sum across all bands
@@ -340,10 +345,11 @@ def merge_region_with_identifier_channel(ref_list, min_num=1000, alpha=0.5, beta
         
         return sorted_ref_list, original_indices
     
-    custom_result = merge_custom(ref_list, min_num=min_num)
-    first_reference_img = np.zeros_like(custom_result)
+    _, x, y = ref_list[0].shape
+    min_num = int(x * y * min_num_percent / 100)
 
-    _,x,y = first_reference_img.shape
+    custom_result = merge_custom(ref_list, min_num_percent=min_num_percent)
+    first_reference_img = np.zeros_like(custom_result)
     
     # Sort ref_list by coverage and get the original indices
     sorted_ref_list, original_indices = sort_ref_list_by_coverage(ref_list)
@@ -351,47 +357,249 @@ def merge_region_with_identifier_channel(ref_list, min_num=1000, alpha=0.5, beta
     # Initialize the identifier channel
     identifier_channel = np.zeros((x, y), dtype=int)  # New channel for identifiers
 
+    # Dictionary to store ct_paras for each identifier_value
+    ct_paras_dict = {}
+
     for idx, img in zip(original_indices, sorted_ref_list):
         try:
-            img[img < 0] = 0.0001  # Set negative values to a small positive value
+            img[img < 0] = 0  # Set negative values to a small positive value
 
             rough_cloud_mask = cal_cloud_mask(img, lower_percent=99.99)
-            cf_mask = (img[0] > 0) & ~rough_cloud_mask
+            cf_mask = (np.all(img > 0, axis=0)) & ~rough_cloud_mask
+
+            cloud_percent = np.count_nonzero(rough_cloud_mask)/np.count_nonzero(np.all(img > 0, axis=0))
 
             if np.sum(cf_mask) < min_num:
                 continue
+
+            if cloud_percent>0.6:
+                continue
         
-            cf_img = colorFunction(custom_result, img, mask=cf_mask, alpha=alpha, beta=beta)
-            cf_img[:, rough_cloud_mask] = img[:, rough_cloud_mask]
+            cf_img, ct_paras = colorFunction(custom_result, img, mask=cf_mask, alpha=alpha, beta=beta, return_paras=True)
+            # cf_img[:, rough_cloud_mask] = img[:, rough_cloud_mask]
+
 
             # Add a new channel to cf_img with the identifier value
-            identifier_value = idx + 1  # Unique identifier for this ref (starting from 1)
+            identifier_value = idx   # Unique identifier for this ref (starting from 1)
             identifier_img = np.full((x, y), identifier_value, dtype=int)
 
             if not np.any(np.iscomplex(cf_img)):
-
                 empty_region = (np.sum(first_reference_img, axis=0) == 0) & (np.sum(cf_img, axis=0) != 0)
                 covered_region = (np.sum(first_reference_img, axis=0) != 0) & (np.sum(cf_img, axis=0) != 0)
+                # other_region = (np.sum(first_reference_img, axis=0) != 0) & (np.sum(cf_img, axis=0) == 0)
 
                 if np.any(empty_region):
                     # Update first_reference_img with cf_img in empty regions
                     first_reference_img[:, empty_region] = cf_img[:, empty_region]
                     # Update identifier_channel with the identifier value in empty regions
                     identifier_channel[empty_region] = identifier_img[empty_region]
+                    # Store ct_paras for this identifier_value
+                    ct_paras_dict[identifier_value] = ct_paras
 
                 if np.any(covered_region):
-                    orig_covered_region_mse = mse(first_reference_img[:, covered_region], custom_result[:, covered_region])
-                    target_covered_region_mse = mse(cf_img[:, covered_region], custom_result[:, covered_region])
-
-                    if (target_covered_region_mse < orig_covered_region_mse) & ((orig_covered_region_mse - target_covered_region_mse) / orig_covered_region_mse > mse_threshold):
+                    channel_weights = [1,1,1,5,5,5,5,5,5]
+                    orig_covered_region_mse = wmse(first_reference_img[:, covered_region], custom_result[:, covered_region],channel_weights=channel_weights)
+                    target_covered_region_mse = wmse(cf_img[:, covered_region], custom_result[:, covered_region],channel_weights=channel_weights)
+                    
+                    if (target_covered_region_mse < orig_covered_region_mse) & (((orig_covered_region_mse - target_covered_region_mse) / orig_covered_region_mse > mse_percent_threashold) or ((orig_covered_region_mse - target_covered_region_mse)> mse_threashold)):
                         # Update first_reference_img with cf_img in covered regions
                         first_reference_img[:, covered_region] = cf_img[:, covered_region]
                         # Update identifier_channel with the identifier value in covered regions
                         identifier_channel[covered_region] = identifier_img[covered_region]
+                        # Store ct_paras for this identifier_value
+                        ct_paras_dict[identifier_value] = ct_paras
 
         except:
             continue
 
-    return first_reference_img, identifier_channel
+    # Get the unique identifier values that are still present in identifier_channel
+    unique_identifier_values = np.unique(identifier_channel)
+    # unique_identifier_values = unique_identifier_values[unique_identifier_values != 0]  # Exclude the background value (0)
+
+    # Create a dictionary to store ct_paras for all unique identifier values
+    unique_ct_paras_dict = {identifier_value: ct_paras_dict.get(identifier_value, None) for identifier_value in unique_identifier_values}
+
+    return first_reference_img, identifier_channel, unique_ct_paras_dict
+
+def merge_region_full_size(ref_list, ct_paras_list, alpha=0.5, beta=0.9):
+    
+    def calculate_coverage(ref):
+        """Calculate the coverage of a single matrix"""
+        sum_ref = np.sum(ref, axis=0)  # Sum across all bands
+        nonzero_count = np.count_nonzero(sum_ref)  # Count the number of non-zero pixels
+        coverage = nonzero_count / (sum_ref.shape[0] * sum_ref.shape[1])  # Calculate the coverage
+        return coverage
+
+    def sort_by_coverage(ref_list, ct_paras_list):
+        """Sort ref_list and ct_paras_list by coverage in descending order"""
+        # Calculate the coverage for each matrix
+        coverages = [calculate_coverage(ref) for ref in ref_list]
+        
+        # Pair each coverage with its corresponding ref and ct_paras
+        coverage_ref_ct_pairs = list(zip(coverages, ref_list, ct_paras_list))
+        
+        # Sort the pairs by coverage in descending order
+        coverage_ref_ct_pairs.sort(reverse=True, key=lambda x: x[0])
+        
+        # Extract the sorted ref_list and ct_paras_list
+        sorted_ref_list = [pair[1] for pair in coverage_ref_ct_pairs]
+        sorted_ct_paras_list = [pair[2] for pair in coverage_ref_ct_pairs]
+        
+        return sorted_ref_list, sorted_ct_paras_list
+    
+    # Sort ref_list and ct_paras_list by coverage
+    sorted_ref_list, sorted_ct_paras_list = sort_by_coverage(ref_list, ct_paras_list)
+
+    # Initialize the result image with zeros
+    _, x, y = sorted_ref_list[0].shape
+    result_img = np.zeros_like(sorted_ref_list[0])
+
+    # Iterate through the sorted ref_list and ct_paras_list
+    for ref, ct_paras in zip(sorted_ref_list, sorted_ct_paras_list):
+        try:
+            # Apply color transfer using the provided ct_paras
+            cf_img = apply_color_transfer_params(ref, ct_paras, alpha=alpha, beta=beta)
+
+            # Find the empty regions in the result image
+            region = (np.sum(cf_img, axis=0) != 0)
+
+            if np.any(result_img[0, region] == 0):
+
+                # Fill the empty regions with the current cf_img
+                result_img[:, region] = cf_img[:, region]
+            
+            if np.count_nonzero(region)/np.count_nonzero(result_img[0, region])>0.6:
+
+                result_img[:, region] = cf_img[:, region]
+
+        except:
+            continue
+
+    return result_img
+
+def merge_region_full_size_orig(ref_list, ct_paras_list, alpha=0.5, beta=0.9):
+    def calculate_coverage(ref):
+        """Calculate the coverage of a single matrix"""
+        sum_ref = np.sum(ref, axis=0)  # Sum across all bands
+        nonzero_count = np.count_nonzero(sum_ref)  # Count the number of non-zero pixels
+        coverage = nonzero_count / (sum_ref.shape[0] * sum_ref.shape[1])  # Calculate the coverage
+        return coverage
+
+    def sort_by_coverage(ref_list, ct_paras_list):
+        """Sort ref_list and ct_paras_list by coverage in descending order"""
+        # Calculate the coverage for each matrix
+        coverages = [calculate_coverage(ref) for ref in ref_list]
+        
+        # Pair each coverage with its corresponding ref and ct_paras
+        coverage_ref_ct_pairs = list(zip(coverages, ref_list, ct_paras_list))
+        
+        # Sort the pairs by coverage in descending order
+        coverage_ref_ct_pairs.sort(reverse=True, key=lambda x: x[0])
+        
+        # Extract the sorted ref_list and ct_paras_list
+        sorted_ref_list = [pair[1] for pair in coverage_ref_ct_pairs]
+        sorted_ct_paras_list = [pair[2] for pair in coverage_ref_ct_pairs]
+        
+        return sorted_ref_list, sorted_ct_paras_list
+    
+    # Sort ref_list and ct_paras_list by coverage
+    sorted_ref_list, sorted_ct_paras_list = sort_by_coverage(ref_list, ct_paras_list)
+
+    # Initialize the result image with zeros
+    _, x, y = sorted_ref_list[0].shape
+    result_img = np.zeros_like(sorted_ref_list[0])
+
+    # Iterate through the sorted ref_list and ct_paras_list
+    for ref, ct_paras in zip(sorted_ref_list, sorted_ct_paras_list):
+        try:
+            # Apply color transfer using the provided ct_paras
+            cf_img = apply_color_transfer_params(ref, ct_paras, alpha=alpha, beta=beta)
+
+            # Find the empty regions in the result image
+            region = (np.sum(cf_img, axis=0) != 0)
+
+            result_img[:, region] = cf_img[:, region]
+
+        except:
+            continue
+
+    return result_img
 
 
+def wmse(image0, image1, channel_weights=None, local_weight_factor=5.0, error_ratio_threshold=3):
+    """
+    Compute the weighted mean-squared error between two images with optional channel weights and local adaptive weights.
+
+    Parameters
+    ----------
+    image0, image1 : ndarray
+        Images. Must have the same shape. The first dimension is the channel dimension.
+    channel_weights : list of float, optional
+        Weights for each channel. Must have the same length as the number of channels.
+        If None, all channels are weighted equally.
+    local_weight_factor : float, optional
+        A factor to control the influence of local adaptive weights. Higher values emphasize larger differences.
+        If 0, local adaptive weights are disabled.
+    error_ratio_threshold : float, optional
+        The threshold for applying local adaptive weights. Only pixels with error_ratio > error_ratio_threshold
+        will have their weights adjusted.
+
+    Returns
+    -------
+    mse : float
+        The weighted mean-squared error (MSE) metric.
+
+    Notes
+    -----
+    - If `channel_weights` is not provided, all channels are weighted equally.
+    - The weights are normalized to ensure they sum to 1.
+    - Local adaptive weights are computed based on the ratio of each pixel's squared error to the global average squared error.
+    - Only pixels with error_ratio > error_ratio_threshold will have their weights adjusted.
+    """
+    # Check shape equality
+    if image0.shape != image1.shape:
+        raise ValueError("Input images must have the same shape.")
+
+    # Get the number of channels
+    num_channels = image0.shape[0]
+
+    # If no weights are provided, use equal weights
+    if channel_weights is None:
+        channel_weights = [1.0 / num_channels] * num_channels
+    else:
+        # Check that the number of weights matches the number of channels
+        if len(channel_weights) != num_channels:
+            raise ValueError("The number of weights must match the number of channels.")
+        
+        # Normalize weights to sum to 1
+        channel_weights = np.array(channel_weights) / np.sum(channel_weights)
+
+    # Compute the squared error for each channel
+    squared_errors = (image0 - image1) ** 2
+
+    # Compute global average squared error
+    global_avg_squared_error = np.mean(squared_errors)
+
+    # Compute local adaptive weights
+    if local_weight_factor > 0:
+        # Calculate the ratio of each pixel's squared error to the global average
+        error_ratio = squared_errors / global_avg_squared_error
+        # Initialize local weights to 1
+        local_weights = np.ones_like(squared_errors)
+        # Apply local weights only where error_ratio > error_ratio_threshold
+        mask = error_ratio > error_ratio_threshold
+        local_weights[mask] = 1 + local_weight_factor * error_ratio[mask]
+    else:
+        # If local_weight_factor is 0, disable local adaptive weights
+        local_weights = 1
+
+    # Apply channel weights and local weights
+    # Reshape channel weights to broadcast correctly over the spatial dimensions
+    weight_shape = [num_channels] + [1] * (squared_errors.ndim - 1)
+    weighted_squared_errors = squared_errors * np.reshape(channel_weights, weight_shape) * local_weights
+
+    # Compute the weighted mean squared error
+    # Sum over all dimensions except the channel dimension
+    mse = np.sum(weighted_squared_errors) / np.prod(image0.shape[1:])
+
+    return mse

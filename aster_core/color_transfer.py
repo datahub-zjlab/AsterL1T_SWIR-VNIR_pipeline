@@ -332,40 +332,44 @@ def cal_rho(orig,target):
     rho = 1 - (6 * sum_d_squared) / (n * (n**2 - 1))
     return rho
 
-
-def colorFunction(ref,color,accurate_flag=False,mask=None,alpha=0,beta=1):
+def calculate_color_transfer_params(ref, color, accurate_flag=False, mask=None):
     color = np.transpose(color, [1, 2, 0])
     ref = np.transpose(ref, [1, 2, 0])
 
-    myShape = color.shape
-
-    mask_ref0 = (ref==0)
-    mask_color0 = (color==0)
+    mask_ref0 = (ref == 0)
+    mask_color0 = (color == 0)
 
     target = (1 - mask_color0) * ref
-    orig = (1 - mask_ref0)*color
-    
-    if not mask is None:
+    orig = (1 - mask_ref0) * color
+
+    if mask is not None:
         orig = orig[mask]
         target = target[mask]
-        
-
     else:
-        overlap_mask = (color[:,:,0]!=0) & (ref[:,:,0]!=0)
+        overlap_mask = (color[:, :, 0] != 0) & (ref[:, :, 0] != 0)
         orig = orig[overlap_mask]
         target = target[overlap_mask]
 
     if accurate_flag:
-        rho = cal_rho(orig,target)
-        rho_threashold = min(np.percentile(rho,20),0.9)
-        spectal_space_mask = rho>rho_threashold
+        rho = cal_rho(orig, target)
+        rho_threshold = min(np.percentile(rho, 20), 0.9)
+        spectral_space_mask = rho > rho_threshold
 
-        if len(spectal_space_mask)/np.sum(np.ones_like(color[:,:,0]))>30:
-            orig = orig[spectal_space_mask]
-            target = target[spectal_space_mask]
+        if len(spectral_space_mask) / np.sum(np.ones_like(color[:, :, 0])) > 30:
+            orig = orig[spectral_space_mask]
+            target = target[spectral_space_mask]
 
-    t,mx0,mx1 = colour_transfer_mkl_params(orig, target)
- 
+    t, mx0, mx1 = colour_transfer_mkl_params(orig, target)
+    ct_paras = (t,mx0,mx1)
+    return ct_paras
+
+def apply_color_transfer_params(color, ct_paras, alpha=0, beta=1):
+    t,mx0,mx1 = ct_paras
+    color = np.transpose(color, [1, 2, 0])
+    myShape = color.shape
+
+    mask_color0 = (color == 0)
+
     t_weighted = alpha * t + (1 - alpha) * np.eye(t.shape[0])
     im_result = np.dot(color - mx0, t_weighted) + beta * mx1 + (1 - beta) * mx0
 
@@ -374,3 +378,11 @@ def colorFunction(ref,color,accurate_flag=False,mask=None,alpha=0,beta=1):
     im_result = np.transpose(im_result, [2, 0, 1])
 
     return im_result
+
+def colorFunction(ref, color, accurate_flag=False, mask=None, alpha=0, beta=1, return_paras=False):
+    ct_paras = calculate_color_transfer_params(ref, color, accurate_flag, mask)
+    im_result = apply_color_transfer_params(color, ct_paras, alpha, beta)
+    if return_paras:
+        return im_result,ct_paras
+    else:
+        return im_result
